@@ -151,9 +151,9 @@ export default function App(){
   // ─── AUTH ───
   const login=async()=>{
     setLE("");
-    if(loginForm.email===MASTER.email&&loginForm.password===MASTER.password){
-      const u={...MASTER};delete u.password;setUser(u);localStorage.setItem("wauya_user",JSON.stringify(u));setView("dashboard");return;
-    }
+    // Check admin_users table first
+    const{data:admin}=await supabase.from("admin_users").select("*").eq("email",loginForm.email).eq("password",loginForm.password).single();
+    if(admin){const u={...admin,role:"master"};delete u.password;setUser(u);localStorage.setItem("wauya_user",JSON.stringify(u));setView("dashboard");return}
     const{data:cu}=await supabase.from("client_users").select("*").eq("email",loginForm.email).eq("password",loginForm.password).single();
     if(cu){const u={...cu,role:"client"};setUser(u);localStorage.setItem("wauya_user",JSON.stringify(u));setView("client_portal");return}
     const{data:emp}=await supabase.from("employees").select("*").eq("email",loginForm.email).eq("password",loginForm.password).single();
@@ -274,7 +274,7 @@ export default function App(){
   }
 
   // ═══ ADMIN PANEL ═══
-  const nav=[{key:"dashboard",label:"Dashboard",icon:"dash"},{key:"prospects",label:"Prospectos",icon:"prosp",cnt:prospects.length},{key:"clients",label:"Clientes",icon:"cli",cnt:clients.length},{key:"employees",label:"Empleados",icon:"emp",cnt:employees.length},{key:"timeline",label:"Cronograma",icon:"cal"},{key:"users",label:"Usuarios",icon:"usr"}];
+  const nav=[{key:"dashboard",label:"Dashboard",icon:"dash"},{key:"prospects",label:"Prospectos",icon:"prosp",cnt:prospects.length},{key:"clients",label:"Clientes",icon:"cli",cnt:clients.length},{key:"employees",label:"Empleados",icon:"emp",cnt:employees.length},{key:"timeline",label:"Cronograma",icon:"cal"},{key:"users",label:"Usuarios",icon:"usr"},{key:"settings",label:"Configuración",icon:"lock"}];
   const sp=prospects.find(p=>p.id===selId);
   const sc=clients.find(x=>x.id===selId);
   const filt=(l)=>l.filter(x=>(x.name+(x.company||"")+(x.email||"")).toLowerCase().includes(search.toLowerCase()));
@@ -357,10 +357,19 @@ export default function App(){
 
       {/* USERS */}
       {view==="users"&&<div><h1 style={{fontFamily:D,fontSize:24,fontWeight:700,color:C.tx,marginBottom:20}}>Usuarios</h1>
-        <Card style={{marginBottom:16}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.acc,marginBottom:12}}><Ic n="lock" sz={15}/> Master</h3><div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.acc},${C.accD})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:C.bg}}>A</div><div><div style={{fontSize:12,fontWeight:500,color:C.tx}}>Admin Wauya</div><div style={{fontSize:10,color:C.td}}>{MASTER.email}</div></div><Badge label="MASTER" color={C.acc}/></div></Card>
-        <Card style={{marginBottom:16}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:12}}>Empleados ({employees.length})</h3>{employees.length===0?<p style={{fontSize:11,color:C.td}}>Sin empleados</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{employees.map(e=><div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div style={{width:26,height:26,borderRadius:6,background:C.pBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:C.p}}>{e.name?.charAt(0)?.toUpperCase()}</div><div><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{e.name}</div><div style={{fontSize:10,color:C.td}}>{e.email} · 🔑 {e.password}</div></div><Badge label="EMPLEADO" color={C.p}/></div>)}</div>}</Card>
-        <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:12}}>Clientes ({clientUsers.length})</h3>{clientUsers.length===0?<p style={{fontSize:11,color:C.td}}>Sin usuarios</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientUsers.map(u=>{const cl=clients.find(x=>x.id===u.client_id);return<div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div style={{width:26,height:26,borderRadius:6,background:C.blBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:C.bl}}>{u.name?.charAt(0)?.toUpperCase()}</div><div><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{u.name}</div><div style={{fontSize:10,color:C.td}}>{u.email} · {cl?.company||"—"} · 🔑 {u.password}</div></div><Badge label="CLIENTE" color={C.bl}/></div>})}</div>}</Card>
+        <Card style={{marginBottom:16}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.acc,marginBottom:12}}><Ic n="lock" sz={15}/> Master</h3><div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.acc},${C.accD})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:C.bg}}>A</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{user?.name||"Admin"}</div><div style={{fontSize:10,color:C.td}}>{user?.email||"admin@wauya.com"}</div></div><Badge label="MASTER" color={C.acc}/><Btn onClick={()=>setView("settings")} v="ghost" sz="sm" icon="edit">Editar</Btn></div></Card>
+        <Card style={{marginBottom:16}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:12}}>Empleados ({employees.length})</h3>{employees.length===0?<p style={{fontSize:11,color:C.td}}>Sin empleados</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{employees.map(e=><div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div style={{width:26,height:26,borderRadius:6,background:C.pBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:C.p}}>{e.name?.charAt(0)?.toUpperCase()}</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{e.name}</div><div style={{fontSize:10,color:C.td}}>{e.email} · 🔑 {e.password}</div></div><Badge label="EMPLEADO" color={C.p}/><Btn onClick={()=>setModal({type:"edit_user",table:"employees",user:e})} v="ghost" sz="sm" icon="edit"/></div>)}</div>}</Card>
+        <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:12}}>Clientes ({clientUsers.length})</h3>{clientUsers.length===0?<p style={{fontSize:11,color:C.td}}>Sin usuarios</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientUsers.map(u=>{const cl=clients.find(x=>x.id===u.client_id);return<div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div style={{width:26,height:26,borderRadius:6,background:C.blBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:C.bl}}>{u.name?.charAt(0)?.toUpperCase()}</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{u.name}</div><div style={{fontSize:10,color:C.td}}>{u.email} · {cl?.company||"—"} · 🔑 {u.password}</div></div><Badge label="CLIENTE" color={C.bl}/><Btn onClick={()=>setModal({type:"edit_user",table:"client_users",user:u})} v="ghost" sz="sm" icon="edit"/></div>})}</div>}</Card>
       </div>}
+
+      {/* SETTINGS */}
+      {view==="settings"&&<SettingsView user={user} onSave={async(updates)=>{
+        setSaving(true);
+        await supabase.from("admin_users").update(updates).eq("id",user.id);
+        const newUser={...user,...updates};delete newUser.password;
+        setUser(newUser);localStorage.setItem("wauya_user",JSON.stringify(newUser));
+        setSaving(false);alert("Datos actualizados correctamente");
+      }} onBack={()=>setView("users")}/>}
 
     </div></div>
 
@@ -373,6 +382,7 @@ export default function App(){
     {modal?.type==="edit_todo"&&<Mod title="Editar Tarea" onClose={()=>setModal(null)} w={560}><FT cid={modal.todo.client_id} emps={employees} init={modal.todo} onDone={async u=>{await updTodo(modal.todo.id,u);setModal(null)}} onX={()=>setModal(null)} isEdit/></Mod>}
     {modal==="upload_pf"&&sp&&<Mod title="Subir Archivo" onClose={()=>setModal(null)}><FU types={PROSP_TYPES} onDone={(file,type)=>uploadFile(file,"prospect",sp.id,type)} onX={()=>setModal(null)}/></Mod>}
     {modal==="upload_del"&&sc&&<Mod title="Subir Entregable" onClose={()=>setModal(null)}><FU types={DEL_TYPES} onDone={(file,type)=>uploadFile(file,"client",sc.id,type)} onX={()=>setModal(null)}/></Mod>}
+    {modal?.type==="edit_user"&&<Mod title="Editar Usuario" onClose={()=>setModal(null)}><FEditUser user={modal.user} table={modal.table} onDone={async(updates)=>{await dbUpd(modal.table,modal.user.id,updates);setModal(null)}} onX={()=>setModal(null)}/></Mod>}
   </div>;
 }
 
@@ -383,3 +393,80 @@ function FCU({onDone,onX}){const[f,s]=useState({name:"",email:"",password:""});c
 function FE({onDone,onX}){const[f,s]=useState({name:"",email:"",password:"",role:""});const gen=()=>{let p="";const c="abcdefghijkmnpqrstuvwxyz23456789";for(let i=0;i<8;i++)p+=c[Math.floor(Math.random()*c.length)];s({...f,password:p})};return<div style={{display:"flex",flexDirection:"column",gap:14}}><Inp label="Nombre" value={f.name} onChange={e=>s({...f,name:e.target.value})} placeholder="María García"/><Inp label="Cargo" value={f.role} onChange={e=>s({...f,role:e.target.value})} placeholder="Diseñador, CM..."/><Inp label="Email" type="email" value={f.email} onChange={e=>s({...f,email:e.target.value})} placeholder="maria@wauya.com"/><div><Inp label="Contraseña" value={f.password} onChange={e=>s({...f,password:e.target.value})} placeholder="Contraseña"/><button onClick={gen} style={{background:"none",border:"none",color:C.acc,fontSize:10,cursor:"pointer",fontFamily:F,marginTop:4}}>Generar automática</button></div><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn onClick={onX} v="ghost">Cancelar</Btn><Btn onClick={()=>{if(f.name&&f.email&&f.password)onDone(f)}} disabled={!f.name||!f.email||!f.password}>Crear</Btn></div></div>}
 function FT({cid,emps,onDone,onX,init,isEdit}){const[f,s]=useState(init?{title:init.title,description:init.description,priority:init.priority,status:init.status,assigned_to:init.assigned_to||"",start_date:init.start_date||todayStr(),end_date:init.end_date||""}:{title:"",description:"",priority:"media",status:"pendiente",assigned_to:"",start_date:todayStr(),end_date:""});return<div style={{display:"flex",flexDirection:"column",gap:14}}><Inp label="Título" value={f.title} onChange={e=>s({...f,title:e.target.value})} placeholder="Diseñar logo..."/><Txt label="Descripción" value={f.description} onChange={e=>s({...f,description:e.target.value})} placeholder="Detalles..."/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><Sel label="Prioridad" value={f.priority} onChange={e=>s({...f,priority:e.target.value})} options={PRIOS}/><Sel label="Estado" value={f.status} onChange={e=>s({...f,status:e.target.value})} options={TSTAT}/></div><Sel label="Asignar a" value={f.assigned_to||""} onChange={e=>s({...f,assigned_to:e.target.value||null})} options={[{value:"",label:"Sin asignar"},...emps.map(e=>({value:e.id,label:e.name}))]}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><Inp label="Inicio" type="date" value={f.start_date||""} onChange={e=>s({...f,start_date:e.target.value})}/><Inp label="Fin" type="date" value={f.end_date||""} onChange={e=>s({...f,end_date:e.target.value})}/></div><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn onClick={onX} v="ghost">Cancelar</Btn><Btn onClick={()=>{if(f.title)onDone({...f,client_id:cid})}} disabled={!f.title}>{isEdit?"Guardar":"Crear"}</Btn></div></div>}
 function FU({types,onDone,onX}){const[tp,sTp]=useState(types[0].value);const[sel,sSel]=useState(null);const ref=useRef(null);return<div style={{display:"flex",flexDirection:"column",gap:14}}><Sel label="Tipo" value={tp} onChange={e=>sTp(e.target.value)} options={types}/><div><label style={{fontSize:11,fontWeight:600,color:C.tm,fontFamily:F,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5,display:"block"}}>Archivo</label><div onClick={()=>ref.current?.click()} style={{border:`2px dashed ${C.b}`,borderRadius:12,padding:28,textAlign:"center",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.acc} onMouseLeave={e=>e.currentTarget.style.borderColor=C.b}><input ref={ref} type="file" style={{display:"none"}} onChange={e=>{if(e.target.files[0])sSel(e.target.files[0])}}/>{sel?<div style={{fontSize:12,color:C.tx}}>📎 {sel.name} ({(sel.size/1024).toFixed(1)} KB)</div>:<div><div style={{fontSize:24,marginBottom:6}}>📁</div><div style={{fontSize:12,color:C.tm}}>Click para seleccionar</div></div>}</div></div><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn onClick={onX} v="ghost">Cancelar</Btn><Btn onClick={()=>{if(sel)onDone(sel,tp)}} disabled={!sel}>Subir</Btn></div></div>}
+
+function FEditUser({user:u,table,onDone,onX}){
+  const[f,s]=useState({name:u.name||"",email:u.email||"",password:u.password||""});
+  const[showPw,setShowPw]=useState(false);
+  const gen=()=>{let p="";const ch="abcdefghijkmnpqrstuvwxyz23456789";for(let i=0;i<8;i++)p+=ch[Math.floor(Math.random()*ch.length)];s({...f,password:p})};
+  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <Inp label="Nombre" value={f.name} onChange={e=>s({...f,name:e.target.value})}/>
+    <Inp label="Email" type="email" value={f.email} onChange={e=>s({...f,email:e.target.value})}/>
+    <div>
+      <Inp label="Nueva contraseña" type={showPw?"text":"password"} value={f.password} onChange={e=>s({...f,password:e.target.value})} placeholder="Escribe nueva contraseña"/>
+      <div style={{display:"flex",gap:12,marginTop:4}}>
+        <button onClick={()=>setShowPw(!showPw)} style={{background:"none",border:"none",color:C.tm,fontSize:10,cursor:"pointer",fontFamily:F}}>{showPw?"🙈 Ocultar":"👁️ Mostrar"}</button>
+        <button onClick={gen} style={{background:"none",border:"none",color:C.acc,fontSize:10,cursor:"pointer",fontFamily:F}}>🔄 Generar automática</button>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
+      <Btn onClick={onX} v="ghost">Cancelar</Btn>
+      <Btn onClick={()=>{if(f.name&&f.email&&f.password)onDone(f)}} disabled={!f.name||!f.email||!f.password}>Guardar</Btn>
+    </div>
+  </div>;
+}
+
+function SettingsView({user:u,onSave,onBack}){
+  const[name,setName]=useState(u?.name||"");
+  const[email,setEmail]=useState(u?.email||"");
+  const[curPw,setCurPw]=useState("");
+  const[newPw,setNewPw]=useState("");
+  const[confirmPw,setConfirmPw]=useState("");
+  const[showPw,setShowPw]=useState(false);
+  const[msg,setMsg]=useState("");
+  const[err,setErr]=useState("");
+
+  const handleSave=async()=>{
+    setErr("");setMsg("");
+    // Verify current password
+    const{data}=await supabase.from("admin_users").select("password").eq("id",u.id).single();
+    if(!data||data.password!==curPw){setErr("Contraseña actual incorrecta");return}
+    const updates={name,email};
+    if(newPw){
+      if(newPw.length<4){setErr("La nueva contraseña debe tener al menos 4 caracteres");return}
+      if(newPw!==confirmPw){setErr("Las contraseñas nuevas no coinciden");return}
+      updates.password=newPw;
+    }
+    await onSave(updates);
+    setCurPw("");setNewPw("");setConfirmPw("");
+    setMsg("Datos actualizados correctamente");
+  };
+
+  return<div>
+    <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:C.tm,cursor:"pointer",fontSize:12,marginBottom:18,padding:0,fontFamily:F}}><Ic n="back" sz={15}/> Volver a Usuarios</button>
+    <h1 style={{fontFamily:D,fontSize:24,fontWeight:700,color:C.tx,marginBottom:4}}>Configuración</h1>
+    <p style={{fontSize:13,color:C.tm,marginBottom:24}}>Administra tu cuenta de administrador</p>
+
+    <Card style={{marginBottom:20,maxWidth:500}}>
+      <h3 style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx,marginBottom:16}}>Datos de la cuenta</h3>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <Inp label="Nombre" value={name} onChange={e=>setName(e.target.value)}/>
+        <Inp label="Email" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+      </div>
+    </Card>
+
+    <Card style={{marginBottom:20,maxWidth:500}}>
+      <h3 style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx,marginBottom:16}}>Cambiar contraseña</h3>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <Inp label="Contraseña actual" type={showPw?"text":"password"} value={curPw} onChange={e=>setCurPw(e.target.value)} placeholder="Escribe tu contraseña actual"/>
+        <Inp label="Nueva contraseña" type={showPw?"text":"password"} value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Escribe la nueva contraseña"/>
+        <Inp label="Confirmar nueva contraseña" type={showPw?"text":"password"} value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} placeholder="Repite la nueva contraseña"/>
+        <button onClick={()=>setShowPw(!showPw)} style={{background:"none",border:"none",color:C.tm,fontSize:11,cursor:"pointer",fontFamily:F,textAlign:"left",padding:0}}>{showPw?"🙈 Ocultar contraseñas":"👁️ Mostrar contraseñas"}</button>
+      </div>
+    </Card>
+
+    {err&&<div style={{color:C.r,fontSize:12,marginBottom:12,fontFamily:F}}>❌ {err}</div>}
+    {msg&&<div style={{color:C.g,fontSize:12,marginBottom:12,fontFamily:F}}>✅ {msg}</div>}
+
+    <Btn onClick={handleSave} disabled={!curPw||!name||!email} sz="lg">Guardar cambios</Btn>
+  </div>;
+}
