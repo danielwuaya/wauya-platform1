@@ -3,7 +3,6 @@ import { supabase } from "./supabase.js";
 import DriveFiles from "./DriveFiles.jsx";
 import KPIDashboard from "./KPIDashboard.jsx";
 
-const MASTER = { email: "admin@wauya.com", password: "wauya2024", role: "master", name: "Admin Wauya" };
 const STATUS_OPTS = [
   { value: "briefing", label: "Briefing", color: "#6B7280", icon: "📋" },
   { value: "en_progreso", label: "En Progreso", color: "#F59E0B", icon: "⚡" },
@@ -49,7 +48,9 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${C.b};border-radius:3px}
 select option{background:${C.s};color:${C.tx}}`;
 
-function Ic({n,sz=18}){const d={dash:<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,prosp:<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,cli:<><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></>,usr:<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,emp:<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></>,cal:<><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,out:<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></>,plus:<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,file:<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></>,dl:<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></>,tr:<><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>,back:<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></>,srch:<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,lock:<><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,check:<><polyline points="20,6 9,17 4,12"/></>,todo:<><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>,edit:<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>};return<svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{d[n]}</svg>}
+function extractFolderId(url){if(!url)return null;const m=url.match(/folders\/([a-zA-Z0-9_-]+)/);if(m)return m[1];if(/^[a-zA-Z0-9_-]{20,}$/.test(url))return url;return null}
+
+function Ic({n,sz=18}){const d={dash:<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,prosp:<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,cli:<><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></>,usr:<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,emp:<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></>,cal:<><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,out:<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></>,plus:<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,file:<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></>,dl:<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></>,tr:<><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>,back:<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></>,srch:<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,lock:<><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,check:<><polyline points="20,6 9,17 4,12"/></>,todo:<><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>,edit:<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,sync:<><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></>};return<svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{d[n]}</svg>}
 
 function Btn({children,onClick,v="primary",sz="md",icon,disabled,style:sx}){const b={display:"inline-flex",alignItems:"center",gap:6,border:"none",cursor:disabled?"not-allowed":"pointer",fontFamily:F,fontWeight:600,borderRadius:8,transition:"all .15s",opacity:disabled?.4:1,whiteSpace:"nowrap",fontSize:sz==="sm"?11:sz==="lg"?14:12,padding:sz==="sm"?"5px 10px":sz==="lg"?"12px 24px":"7px 14px"};const vs={primary:{background:C.acc,color:"#0A0A0B"},secondary:{background:C.s2,color:C.tx,border:`1px solid ${C.b}`},danger:{background:C.rBg,color:C.r,border:"1px solid #3D1525"},ghost:{background:"transparent",color:C.tm}};return<button onClick={onClick} disabled={disabled} style={{...b,...vs[v],...sx}}>{icon&&<Ic n={icon} sz={sz==="sm"?13:15}/>}{children}</button>}
 function Inp({label,...p}){return<div style={{display:"flex",flexDirection:"column",gap:5}}>{label&&<label style={{fontSize:11,fontWeight:600,color:C.tm,fontFamily:F,textTransform:"uppercase",letterSpacing:".06em"}}>{label}</label>}<input {...p} style={{background:C.bg,border:`1px solid ${C.b}`,borderRadius:8,padding:"9px 12px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",width:"100%",...p.style}} onFocus={e=>e.target.style.borderColor=C.acc} onBlur={e=>e.target.style.borderColor=C.b}/></div>}
@@ -80,11 +81,9 @@ function Donut({data,size=110}){const total=data.reduce((a,d)=>a+d.value,0)||1;l
 
 function Timeline({tasks,employees}){
   const dated=tasks.filter(t=>t.start_date);if(!dated.length)return<Empty icon="📅" title="Sin fechas" sub="Asigna fechas"/>;
-  const sorted=[...dated].sort((a,b)=>a.start_date.localeCompare(b.start_date));
-  const allD=sorted.flatMap(t=>[t.start_date,t.end_date].filter(Boolean));
+  const sorted=[...dated].sort((a,b)=>a.start_date.localeCompare(b.start_date));const allD=sorted.flatMap(t=>[t.start_date,t.end_date].filter(Boolean));
   const minD=new Date(Math.min(...allD.map(d=>new Date(d)))),maxD=new Date(Math.max(...allD.map(d=>new Date(d))));
-  const diff=Math.max(Math.ceil((maxD-minD)/864e5),1),dW=Math.max(30,700/diff);
-  const getP=d=>((new Date(d)-minD)/864e5)*dW;
+  const diff=Math.max(Math.ceil((maxD-minD)/864e5),1),dW=Math.max(30,700/diff);const getP=d=>((new Date(d)-minD)/864e5)*dW;
   const days=[];for(let d=new Date(minD);d<=maxD;d.setDate(d.getDate()+1))days.push(new Date(d));
   return<div style={{overflowX:"auto",borderRadius:10,border:`1px solid ${C.b}`}}><div style={{minWidth:days.length*dW+200}}>
     <div style={{display:"flex",borderBottom:`1px solid ${C.b}`,position:"sticky",top:0,background:C.s,zIndex:2}}>
@@ -95,6 +94,7 @@ function Timeline({tasks,employees}){
   </div></div>;
 }
 
+// ═══════════════ MAIN APP ═══════════════
 export default function App(){
   const[loading,setLoading]=useState(true);
   const[user,setUser]=useState(null);
@@ -111,6 +111,7 @@ export default function App(){
   const[loginForm,setLF]=useState({email:"",password:""});
   const[loginErr,setLE]=useState("");
   const[saving,setSaving]=useState(false);
+  const[syncStatus,setSyncStatus]=useState("");
 
   const loadAll=useCallback(async()=>{
     const[p,cl,em,cu,td,fl]=await Promise.all([
@@ -155,7 +156,7 @@ export default function App(){
   const addProspect=async(p)=>{await dbAdd("prospects",p);setModal(null)};
   const updProspect=async(id,u)=>dbUpd("prospects",id,u);
   const delProspect=async(id)=>{if(!confirm("¿Eliminar?"))return;await dbDel("prospects",id);if(selId===id)setSelId(null)};
-  const convertProspect=async(id)=>{const p=prospects.find(x=>x.id===id);if(!p)return;await dbAdd("clients",{name:p.name,company:p.company,email:p.email,phone:p.phone,services:p.services,notes:p.notes,status:"briefing"});await dbDel("prospects",id);setSelId(null);setView("clients")};
+  const convertProspect=async(id)=>{const p=prospects.find(x=>x.id===id);if(!p)return;await dbAdd("clients",{name:p.name,company:p.company,email:p.email,phone:p.phone,services:p.services,notes:p.notes,status:"briefing",drive_folder_id:p.drive_folder_id});await dbDel("prospects",id);setSelId(null);setView("clients")};
   const addClient=async(cl)=>{await dbAdd("clients",cl);setModal(null)};
   const updClient=async(id,u)=>dbUpd("clients",id,u);
   const delClient=async(id)=>{if(!confirm("¿Eliminar?"))return;await dbDel("clients",id);if(selId===id)setSelId(null)};
@@ -166,6 +167,33 @@ export default function App(){
   const addTodo=async(td)=>{await dbAdd("todos",td);setModal(null)};
   const updTodo=async(id,u)=>dbUpd("todos",id,u);
   const delTodo=async(id)=>{if(!confirm("¿Eliminar?"))return;await dbDel("todos",id)};
+
+  // ─── SYNC PROSPECTS FROM DRIVE ───
+  const syncFromDrive=async(folderUrl)=>{
+    const folderId=extractFolderId(folderUrl);
+    if(!folderId){alert("URL de carpeta no válida");return}
+    setSaving(true);setSyncStatus("Escaneando carpeta de Drive...");
+    try{
+      const res=await fetch(`/api/drive?action=list&folderId=${folderId}`);
+      const items=await res.json();
+      if(items.error){alert("Error: "+items.error);setSaving(false);setSyncStatus("");return}
+      const folders=items.filter(f=>f.mimeType==="application/vnd.google-apps.folder");
+      if(folders.length===0){alert("No se encontraron carpetas de leads");setSaving(false);setSyncStatus("");return}
+      let created=0,skipped=0;
+      for(const folder of folders){
+        const exists=prospects.find(p=>(p.company||"").toLowerCase()===folder.name.toLowerCase()||(p.name||"").toLowerCase()===folder.name.toLowerCase());
+        const existsClient=clients.find(c=>(c.company||"").toLowerCase()===folder.name.toLowerCase()||(c.name||"").toLowerCase()===folder.name.toLowerCase());
+        if(exists||existsClient){skipped++;continue}
+        setSyncStatus(`Creando: ${folder.name}...`);
+        await supabase.from("prospects").insert({name:folder.name,company:folder.name,drive_folder_id:folder.id});
+        created++;
+      }
+      await loadAll();
+      setSyncStatus("");setSaving(false);setModal(null);
+      localStorage.setItem("wauya_leads_folder",folderUrl);
+      alert(`Sincronización completada:\n✅ ${created} prospectos creados\n⏭ ${skipped} ya existían\n📁 ${folders.length} carpetas encontradas`);
+    }catch(e){alert("Error sincronizando: "+e.message);setSaving(false);setSyncStatus("")}
+  };
 
   const prospFiles=(pid)=>files.filter(f=>f.owner_type==="prospect"&&f.owner_id===pid);
   const clientFiles=(cid)=>files.filter(f=>f.owner_type==="client"&&f.owner_id===cid);
@@ -232,13 +260,14 @@ export default function App(){
     </div>;
   }
 
+  // ═══ ADMIN ═══
   const nav=[{key:"dashboard",label:"Dashboard",icon:"dash"},{key:"prospects",label:"Prospectos",icon:"prosp",cnt:prospects.length},{key:"clients",label:"Clientes",icon:"cli",cnt:clients.length},{key:"employees",label:"Empleados",icon:"emp",cnt:employees.length},{key:"timeline",label:"Cronograma",icon:"cal"},{key:"users",label:"Usuarios",icon:"usr"},{key:"settings",label:"Configuración",icon:"lock"}];
   const sp=prospects.find(p=>p.id===selId);
   const sc=clients.find(x=>x.id===selId);
   const filt=(l)=>l.filter(x=>(x.name+(x.company||"")+(x.email||"")).toLowerCase().includes(search.toLowerCase()));
 
   return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh",display:"flex"}}><style>{CSS}</style>
-    {saving&&<div style={{position:"fixed",top:12,right:12,background:C.acc,color:"#000",padding:"6px 14px",borderRadius:8,fontSize:11,fontWeight:700,zIndex:2000,animation:"fadeIn .2s"}}>Guardando...</div>}
+    {saving&&<div style={{position:"fixed",top:12,right:12,background:C.acc,color:"#000",padding:"6px 14px",borderRadius:8,fontSize:11,fontWeight:700,zIndex:2000,animation:"fadeIn .2s"}}>{syncStatus||"Guardando..."}</div>}
 
     <div style={{width:220,borderRight:`1px solid ${C.b}`,display:"flex",flexDirection:"column",flexShrink:0,background:C.s,position:"sticky",top:0,height:"100vh"}}>
       <div style={{padding:"20px 18px 28px",borderBottom:`1px solid ${C.b}`}}><div style={{fontFamily:D,fontSize:26,fontWeight:800,color:C.tx}}>W<span style={{color:C.acc}}>.</span></div><div style={{fontSize:10,color:C.td,marginTop:1,letterSpacing:".1em",textTransform:"uppercase"}}>Project Manager</div></div>
@@ -261,10 +290,21 @@ export default function App(){
         </div>
       </div>}
 
+      {/* ═══ PROSPECTS - WITH DRIVE SYNC ═══ */}
       {view==="prospects"&&!selId&&<div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><h1 style={{fontFamily:D,fontSize:24,fontWeight:700,color:C.tx}}>Prospectos</h1><Btn onClick={()=>setModal("add_prospect")} icon="plus">Nuevo Prospecto</Btn></div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <h1 style={{fontFamily:D,fontSize:24,fontWeight:700,color:C.tx}}>Prospectos</h1>
+          <div style={{display:"flex",gap:8}}>
+            <Btn onClick={()=>setModal("sync_drive")} v="secondary" icon="sync">Sincronizar Drive</Btn>
+            <Btn onClick={()=>setModal("add_prospect")} icon="plus">Nuevo Manual</Btn>
+          </div>
+        </div>
+        {localStorage.getItem("wauya_leads_folder")&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,padding:"8px 14px",background:C.s,borderRadius:10,border:`1px solid ${C.b}`,fontSize:11,color:C.tm}}>
+          <span>📁</span><span>Carpeta vinculada: leads entrantes</span>
+          <button onClick={()=>{const url=localStorage.getItem("wauya_leads_folder");if(url)syncFromDrive(url)}} style={{marginLeft:"auto",background:C.acc+"20",border:`1px solid ${C.acc}30`,borderRadius:6,padding:"3px 10px",color:C.acc,cursor:"pointer",fontSize:10,fontWeight:700,fontFamily:F}}>🔄 Re-sincronizar</button>
+        </div>}
         <div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>
-        {filt(prospects).length===0?<Empty icon="🎯" title="Sin prospectos" sub="Agrega tu primer prospecto"/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>{filt(prospects).map(p=><Card key={p.id} hover onClick={()=>setSelId(p.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{p.company||p.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{p.name}</div></div></div>{p.email&&<div style={{fontSize:11,color:C.td}}>✉ {p.email}</div>}<div style={{display:"flex",gap:8,marginTop:8,fontSize:10,color:C.td}}><Ic n="file" sz={12}/> {prospFiles(p.id).length} archivos</div></Card>)}</div>}
+        {filt(prospects).length===0?<Empty icon="🎯" title="Sin prospectos" sub="Sincroniza tu carpeta de Drive o crea uno manual"/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>{filt(prospects).map(p=><Card key={p.id} hover onClick={()=>setSelId(p.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{p.company||p.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{p.name}</div></div>{p.drive_folder_id&&<span style={{fontSize:10,color:C.g}}>📁 Drive</span>}</div>{p.email&&<div style={{fontSize:11,color:C.td}}>✉ {p.email}</div>}<div style={{display:"flex",gap:8,marginTop:8,fontSize:10,color:C.td}}><Ic n="file" sz={12}/> {prospFiles(p.id).length} archivos</div></Card>)}</div>}
       </div>}
 
       {view==="prospects"&&selId&&sp&&<div>
@@ -319,6 +359,10 @@ export default function App(){
 
     </div></div>
 
+    {/* ═══ MODALS ═══ */}
+    {modal==="sync_drive"&&<Mod title="Sincronizar Prospectos desde Drive" onClose={()=>setModal(null)}>
+      <SyncDriveForm onSync={syncFromDrive} onCancel={()=>setModal(null)} saving={saving} syncStatus={syncStatus}/>
+    </Mod>}
     {modal==="add_prospect"&&<Mod title="Nuevo Prospecto" onClose={()=>setModal(null)}><FP onDone={addProspect} onX={()=>setModal(null)}/></Mod>}
     {modal==="add_client"&&<Mod title="Nuevo Cliente" onClose={()=>setModal(null)}><FC onDone={addClient} onX={()=>setModal(null)}/></Mod>}
     {modal==="add_cu"&&sc&&<Mod title={`Usuario - ${sc.company||sc.name}`} onClose={()=>setModal(null)}><FCU onDone={u=>addCU(sc.id,u)} onX={()=>setModal(null)}/></Mod>}
@@ -328,6 +372,28 @@ export default function App(){
     {modal==="upload_pf"&&sp&&<Mod title="Subir Archivo" onClose={()=>setModal(null)}><FU types={PROSP_TYPES} onDone={(file,type)=>uploadFile(file,"prospect",sp.id,type)} onX={()=>setModal(null)}/></Mod>}
     {modal==="upload_del"&&sc&&<Mod title="Subir Entregable" onClose={()=>setModal(null)}><FU types={DEL_TYPES} onDone={(file,type)=>uploadFile(file,"client",sc.id,type)} onX={()=>setModal(null)}/></Mod>}
     {modal?.type==="edit_user"&&<Mod title="Editar Usuario" onClose={()=>setModal(null)}><FEditUser user={modal.user} table={modal.table} onDone={async(updates)=>{await dbUpd(modal.table,modal.user.id,updates);setModal(null)}} onX={()=>setModal(null)}/></Mod>}
+  </div>;
+}
+
+// ═══ FORMS ═══
+function SyncDriveForm({onSync,onCancel,saving,syncStatus}){
+  const[url,setUrl]=useState(localStorage.getItem("wauya_leads_folder")||"");
+  return<div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{background:C.bg,borderRadius:10,padding:16,border:`1px solid ${C.b}`}}>
+      <div style={{fontSize:13,fontWeight:600,color:C.tx,marginBottom:8,fontFamily:D}}>¿Cómo funciona?</div>
+      <div style={{fontSize:12,color:C.tm,lineHeight:1.7}}>
+        1. Pega el link de tu carpeta <strong style={{color:C.acc}}>leads entrantes</strong> de Drive<br/>
+        2. La plataforma escanea las subcarpetas<br/>
+        3. Cada carpeta se convierte en un prospecto automáticamente<br/>
+        4. El Drive de cada prospecto queda vinculado automáticamente
+      </div>
+    </div>
+    <Inp label="Link de carpeta de Drive (leads entrantes)" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..."/>
+    {syncStatus&&<div style={{fontSize:12,color:C.acc,fontFamily:F}}>{syncStatus}</div>}
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
+      <Btn onClick={onCancel} v="ghost">Cancelar</Btn>
+      <Btn onClick={()=>onSync(url)} disabled={!url||saving} icon="sync">{saving?"Sincronizando...":"Sincronizar"}</Btn>
+    </div>
   </div>;
 }
 
@@ -345,56 +411,37 @@ function FEditUser({user:u,table,onDone,onX}){
   return<div style={{display:"flex",flexDirection:"column",gap:14}}>
     <Inp label="Nombre" value={f.name} onChange={e=>s({...f,name:e.target.value})}/>
     <Inp label="Email" type="email" value={f.email} onChange={e=>s({...f,email:e.target.value})}/>
-    <div>
-      <Inp label="Nueva contraseña" type={showPw?"text":"password"} value={f.password} onChange={e=>s({...f,password:e.target.value})} placeholder="Escribe nueva contraseña"/>
-      <div style={{display:"flex",gap:12,marginTop:4}}>
-        <button onClick={()=>setShowPw(!showPw)} style={{background:"none",border:"none",color:C.tm,fontSize:10,cursor:"pointer",fontFamily:F}}>{showPw?"🙈 Ocultar":"👁️ Mostrar"}</button>
-        <button onClick={gen} style={{background:"none",border:"none",color:C.acc,fontSize:10,cursor:"pointer",fontFamily:F}}>🔄 Generar automática</button>
-      </div>
-    </div>
-    <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
-      <Btn onClick={onX} v="ghost">Cancelar</Btn>
-      <Btn onClick={()=>{if(f.name&&f.email&&f.password)onDone(f)}} disabled={!f.name||!f.email||!f.password}>Guardar</Btn>
-    </div>
+    <div><Inp label="Nueva contraseña" type={showPw?"text":"password"} value={f.password} onChange={e=>s({...f,password:e.target.value})} placeholder="Escribe nueva contraseña"/>
+      <div style={{display:"flex",gap:12,marginTop:4}}><button onClick={()=>setShowPw(!showPw)} style={{background:"none",border:"none",color:C.tm,fontSize:10,cursor:"pointer",fontFamily:F}}>{showPw?"🙈 Ocultar":"👁️ Mostrar"}</button><button onClick={gen} style={{background:"none",border:"none",color:C.acc,fontSize:10,cursor:"pointer",fontFamily:F}}>🔄 Generar automática</button></div></div>
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn onClick={onX} v="ghost">Cancelar</Btn><Btn onClick={()=>{if(f.name&&f.email&&f.password)onDone(f)}} disabled={!f.name||!f.email||!f.password}>Guardar</Btn></div>
   </div>;
 }
 
 function SettingsView({user:u,onSave,onBack}){
-  const[name,setName]=useState(u?.name||"");
-  const[email,setEmail]=useState(u?.email||"");
-  const[curPw,setCurPw]=useState("");
-  const[newPw,setNewPw]=useState("");
-  const[confirmPw,setConfirmPw]=useState("");
-  const[showPw,setShowPw]=useState(false);
-  const[msg,setMsg]=useState("");
-  const[err,setErr]=useState("");
+  const[name,setName]=useState(u?.name||"");const[email,setEmail]=useState(u?.email||"");
+  const[curPw,setCurPw]=useState("");const[newPw,setNewPw]=useState("");const[confirmPw,setConfirmPw]=useState("");
+  const[showPw,setShowPw]=useState(false);const[msg,setMsg]=useState("");const[err,setErr]=useState("");
   const handleSave=async()=>{
     setErr("");setMsg("");
     const{data}=await supabase.from("admin_users").select("password").eq("id",u.id).single();
     if(!data||data.password!==curPw){setErr("Contraseña actual incorrecta");return}
     const updates={name,email};
-    if(newPw){if(newPw.length<4){setErr("La nueva contraseña debe tener al menos 4 caracteres");return}if(newPw!==confirmPw){setErr("Las contraseñas nuevas no coinciden");return}updates.password=newPw}
-    await onSave(updates);setCurPw("");setNewPw("");setConfirmPw("");setMsg("Datos actualizados correctamente");
+    if(newPw){if(newPw.length<4){setErr("Mínimo 4 caracteres");return}if(newPw!==confirmPw){setErr("No coinciden");return}updates.password=newPw}
+    await onSave(updates);setCurPw("");setNewPw("");setConfirmPw("");setMsg("Datos actualizados");
   };
   return<div>
     <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:C.tm,cursor:"pointer",fontSize:12,marginBottom:18,padding:0,fontFamily:F}}><Ic n="back" sz={15}/> Volver a Usuarios</button>
     <h1 style={{fontFamily:D,fontSize:24,fontWeight:700,color:C.tx,marginBottom:4}}>Configuración</h1>
-    <p style={{fontSize:13,color:C.tm,marginBottom:24}}>Administra tu cuenta de administrador</p>
-    <Card style={{marginBottom:20,maxWidth:500}}>
-      <h3 style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx,marginBottom:16}}>Datos de la cuenta</h3>
-      <div style={{display:"flex",flexDirection:"column",gap:14}}><Inp label="Nombre" value={name} onChange={e=>setName(e.target.value)}/><Inp label="Email" type="email" value={email} onChange={e=>setEmail(e.target.value)}/></div>
-    </Card>
-    <Card style={{marginBottom:20,maxWidth:500}}>
-      <h3 style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx,marginBottom:16}}>Cambiar contraseña</h3>
-      <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        <Inp label="Contraseña actual" type={showPw?"text":"password"} value={curPw} onChange={e=>setCurPw(e.target.value)} placeholder="Escribe tu contraseña actual"/>
-        <Inp label="Nueva contraseña" type={showPw?"text":"password"} value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Escribe la nueva contraseña"/>
-        <Inp label="Confirmar nueva contraseña" type={showPw?"text":"password"} value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} placeholder="Repite la nueva contraseña"/>
-        <button onClick={()=>setShowPw(!showPw)} style={{background:"none",border:"none",color:C.tm,fontSize:11,cursor:"pointer",fontFamily:F,textAlign:"left",padding:0}}>{showPw?"🙈 Ocultar contraseñas":"👁️ Mostrar contraseñas"}</button>
-      </div>
-    </Card>
-    {err&&<div style={{color:C.r,fontSize:12,marginBottom:12,fontFamily:F}}>❌ {err}</div>}
-    {msg&&<div style={{color:C.g,fontSize:12,marginBottom:12,fontFamily:F}}>✅ {msg}</div>}
+    <p style={{fontSize:13,color:C.tm,marginBottom:24}}>Administra tu cuenta</p>
+    <Card style={{marginBottom:20,maxWidth:500}}><h3 style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx,marginBottom:16}}>Datos de la cuenta</h3><div style={{display:"flex",flexDirection:"column",gap:14}}><Inp label="Nombre" value={name} onChange={e=>setName(e.target.value)}/><Inp label="Email" type="email" value={email} onChange={e=>setEmail(e.target.value)}/></div></Card>
+    <Card style={{marginBottom:20,maxWidth:500}}><h3 style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx,marginBottom:16}}>Cambiar contraseña</h3><div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Inp label="Contraseña actual" type={showPw?"text":"password"} value={curPw} onChange={e=>setCurPw(e.target.value)} placeholder="Actual"/>
+      <Inp label="Nueva" type={showPw?"text":"password"} value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Nueva"/>
+      <Inp label="Confirmar" type={showPw?"text":"password"} value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} placeholder="Confirmar"/>
+      <button onClick={()=>setShowPw(!showPw)} style={{background:"none",border:"none",color:C.tm,fontSize:11,cursor:"pointer",fontFamily:F,textAlign:"left",padding:0}}>{showPw?"🙈 Ocultar":"👁️ Mostrar"}</button>
+    </div></Card>
+    {err&&<div style={{color:C.r,fontSize:12,marginBottom:12}}>❌ {err}</div>}
+    {msg&&<div style={{color:C.g,fontSize:12,marginBottom:12}}>✅ {msg}</div>}
     <Btn onClick={handleSave} disabled={!curPw||!name||!email} sz="lg">Guardar cambios</Btn>
   </div>;
 }
