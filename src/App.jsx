@@ -293,7 +293,7 @@ function FTGlobal({clients,prospects,emps,onDone,onX,init,isEdit,defaults={}}){
       <Inp label="Inicio" type="date" value={f.start_date||""} onChange={e=>s({...f,start_date:e.target.value})}/>
       <Inp label="Entrega" type="date" value={f.end_date||""} onChange={e=>s({...f,end_date:e.target.value})}/>
     </div>
-    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn onClick={onX} v="ghost">Cancelar</Btn><Btn onClick={()=>{if(f.title)onDone(f)}} disabled={!f.title}>{isEdit?"Guardar":"Crear"}</Btn></div>
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn onClick={onX} v="ghost">Cancelar</Btn><Btn onClick={()=>{if(f.title){const d={...f};if(!d.client_id)d.client_id=null;if(!d.prospect_id)d.prospect_id=null;if(!d.assigned_to)d.assigned_to=null;onDone(d)}}} disabled={!f.title}>{isEdit?"Guardar":"Crear"}</Btn></div>
   </div>;
 }
 
