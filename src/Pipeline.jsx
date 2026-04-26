@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-const C = { bg:"#08080A",s:"#111115",s2:"#18181E",b:"#222230",tx:"#F0F0F4",tm:"#9898A8",td:"#5A5A6E",acc:"#CDFF50",r:"#FF4D6A",g:"#34D399",w:"#FBBF24",p:"#A78BFA",bl:"#60A5FA" };
-const F = "'DM Sans', sans-serif", D = "'Sora', sans-serif";
+const C = { bg:"#060B18",s:"#0A1428",s2:"#0F1D38",b:"#1A2D52",tx:"#F0F0F4",tm:"#8A94A8",td:"#4A5568",acc:"#F8BA10",r:"#FF4D6A",g:"#36DE67",w:"#FFC107",p:"#4A90D9",bl:"#60A5FA" };
+const F = "'Poppins', sans-serif", D = "'Playfair Display', serif";
 
 const STAGES = [
   { value: "nuevo", label: "Nuevo", color: "#6B7280", icon: "🆕" },
