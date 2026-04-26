@@ -12,39 +12,38 @@ export default function generateQBR(client, kpiData, monthlyData) {
       const change = p ? (((c - p) / p) * 100).toFixed(1) : "N/A";
       const isUp = parseFloat(change) >= 0;
       const fmt = (v) => { const n = parseFloat(String(v).replace(/[,%$]/g, "")); if (type.includes("%") || type.includes("porcentaje")) return n.toFixed(1) + "%"; if (type.includes("$") || type.includes("moneda")) return "$" + n.toLocaleString(); return n.toLocaleString(); };
-      kpiRows += `<tr><td style="padding:10px 14px;border-bottom:1px solid #eee;font-weight:600">${row[0]}</td><td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:18px;font-weight:700">${fmt(cur)}</td><td style="padding:10px 14px;border-bottom:1px solid #eee">${fmt(prev)}</td><td style="padding:10px 14px;border-bottom:1px solid #eee">${target}</td><td style="padding:10px 14px;border-bottom:1px solid #eee;color:${isUp ? "#059669" : "#DC2626"};font-weight:600">${isUp ? "↑" : "↓"} ${Math.abs(change)}%</td></tr>`;
+      kpiRows += `<tr><td style="padding:10px 14px;border-bottom:1px solid #e0e7f0;font-weight:600">${row[0]}</td><td style="padding:10px 14px;border-bottom:1px solid #e0e7f0;font-size:18px;font-weight:700;color:#012762">${fmt(cur)}</td><td style="padding:10px 14px;border-bottom:1px solid #e0e7f0">${fmt(prev)}</td><td style="padding:10px 14px;border-bottom:1px solid #e0e7f0">${target}</td><td style="padding:10px 14px;border-bottom:1px solid #e0e7f0;color:${isUp ? "#36DE67" : "#DC2626"};font-weight:600">${isUp ? "↑" : "↓"} ${Math.abs(change)}%</td></tr>`;
     });
   }
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QBR - ${name}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',sans-serif;color:#1a1a2e;background:#fff;padding:40px 50px}
+body{font-family:'Poppins',sans-serif;color:#1a2744;background:#fff;padding:40px 50px}
 @media print{body{padding:20px 30px}@page{margin:1.5cm}}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #1a1a2e}
-.logo{font-size:32px;font-weight:800;letter-spacing:-1px}
-.logo span{color:#CDFF50;background:#1a1a2e;padding:2px 6px;border-radius:4px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #012762}
+.logo{font-family:'Playfair Display',serif;font-size:32px;font-weight:800;color:#012762;letter-spacing:-1px}
+.logo span{color:#F8BA10}
 .meta{text-align:right;font-size:13px;color:#666}
-.meta strong{display:block;font-size:18px;color:#1a1a2e}
-h2{font-size:18px;font-weight:700;margin:28px 0 14px;color:#1a1a2e;border-left:4px solid #CDFF50;padding-left:12px}
+.meta strong{display:block;font-size:18px;color:#012762;font-family:'Playfair Display',serif}
+h2{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;margin:28px 0 14px;color:#012762;border-left:4px solid #F8BA10;padding-left:12px}
 table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
-th{background:#f7f7f8;padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#666;border-bottom:2px solid #ddd}
+th{background:#012762;color:#fff;padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
 .summary{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
-.summary-card{flex:1;min-width:140px;background:#f7f7f8;border-radius:10px;padding:16px;text-align:center}
-.summary-card .val{font-size:28px;font-weight:800;color:#1a1a2e}
+.summary-card{flex:1;min-width:140px;background:#f0f4fa;border-radius:10px;padding:16px;text-align:center;border-left:3px solid #F8BA10}
+.summary-card .val{font-size:28px;font-weight:800;color:#012762;font-family:'Playfair Display',serif}
 .summary-card .label{font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
-.footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
-.status{display:inline-block;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.footer{margin-top:40px;padding-top:16px;border-top:2px solid #012762;font-size:11px;color:#999;text-align:center}
 </style></head><body>
 <div class="header">
-  <div><div class="logo">W<span>.</span></div><div style="font-size:12px;color:#888;margin-top:4px">WAUYA MARKETING</div></div>
+  <div><div class="logo">W<span>uaya</span></div><div style="font-size:11px;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:.08em">Marketing & Communications</div></div>
   <div class="meta"><strong>${name}</strong>Reporte QBR · ${date}</div>
 </div>
 
 <h2>Resumen ejecutivo</h2>
 <div class="summary">
-  <div class="summary-card"><div class="val" style="color:#1a1a2e">📊</div><div class="label">Reporte mensual</div></div>
+  <div class="summary-card"><div class="val">📊</div><div class="label">Reporte mensual</div></div>
   <div class="summary-card"><div class="val">${client.status === "entregado" ? "✅" : client.status === "aprobado" ? "👍" : "⚡"}</div><div class="label">Estado: ${client.status || "En progreso"}</div></div>
   <div class="summary-card"><div class="val">${kpiData ? kpiData.length - 1 : 0}</div><div class="label">KPIs rastreados</div></div>
 </div>
@@ -58,7 +57,7 @@ ${kpiRows ? `<table><thead><tr><th>Métrica</th><th>Actual</th><th>Anterior</th>
 ${client.notes ? `<h2>Notas del proyecto</h2><p style="font-size:13px;line-height:1.7;color:#444">${client.notes}</p>` : ""}
 
 <div class="footer">
-  Generado por Wauya Platform · ${new Date().toLocaleDateString("es")} · mywuaya.com
+  Generado por Wuaya Platform · ${new Date().toLocaleDateString("es")} · mywuaya.com
 </div>
 </body></html>`;
 
