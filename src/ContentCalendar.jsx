@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
-const C = { bg:"#08080A",s:"#111115",s2:"#18181E",b:"#222230",tx:"#F0F0F4",tm:"#9898A8",td:"#5A5A6E",acc:"#CDFF50",r:"#FF4D6A",g:"#34D399",w:"#FBBF24",p:"#A78BFA",bl:"#60A5FA",blBg:"#0A1220" };
-const F = "'DM Sans', sans-serif", D = "'Sora', sans-serif";
+const C = { bg:"#060B18",s:"#0A1428",s2:"#0F1D38",b:"#1A2D52",tx:"#F0F0F4",tm:"#8A94A8",td:"#4A5568",acc:"#F8BA10",r:"#FF4D6A",g:"#36DE67",w:"#FFC107",p:"#4A90D9",bl:"#60A5FA",blBg:"#0A1633" };
+const F = "'Poppins', sans-serif", D = "'Playfair Display', serif";
 
 const PLATFORMS = { instagram: { icon: "📸", color: "#E1306C" }, facebook: { icon: "📘", color: "#1877F2" }, tiktok: { icon: "🎵", color: "#00f2ea" }, linkedin: { icon: "💼", color: "#0A66C2" }, twitter: { icon: "🐦", color: "#1DA1F2" }, youtube: { icon: "▶️", color: "#FF0000" }, blog: { icon: "📝", color: "#34D399" }, email: { icon: "📧", color: "#F59E0B" }, otro: { icon: "📌", color: "#9898A8" } };
 const POST_STATUS = { pendiente: { color: "#6B7280", label: "Pendiente" }, aprobado: { color: "#34D399", label: "Aprobado" }, publicado: { color: "#60A5FA", label: "Publicado" }, borrador: { color: "#F59E0B", label: "Borrador" } };
