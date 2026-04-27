@@ -321,32 +321,48 @@ function FOnboarding({prospect,onDone,onX}){
   </div>;
 }
 
-// ─── AI CONTENT ASSISTANT (admin tool) ───
+// ─── AI CONTENT ASSISTANT (OpenAI GPT + DALL-E) ───
 function FAIAssist({clients}){
   const[selClient,setSelClient]=useState("");
   const[mode,setMode]=useState("ideas");
   const[result,setResult]=useState("");
+  const[imageUrl,setImageUrl]=useState("");
   const[loading,setLoading]=useState(false);
   const[custom,setCustom]=useState("");
+  const[imgPrompt,setImgPrompt]=useState("");
   const cl=clients.find(c=>c.id===selClient);
   const cName=cl?.company||cl?.name||"tu agencia";
   const cServices=cl?.services||"marketing digital";
-  const modes=[{key:"ideas",label:"Ideas de posts",icon:"💡",prompt:`Genera 10 ideas de posts para redes sociales para "${cName}". Servicios: ${cServices}. En español. Incluye el tipo (reel, carrusel, imagen, story) y descripción. Lista numerada.`},
-    {key:"captions",label:"Captions",icon:"✍️",prompt:`Escribe 5 captions profesionales para Instagram para "${cName}" (${cServices}). Incluye emojis y 5 hashtags por caption. En español.`},
-    {key:"hashtags",label:"Hashtags",icon:"#️⃣",prompt:`Genera 30 hashtags para "${cName}" (${cServices}). Agrúpalos: 10 de nicho, 10 alcance medio, 10 populares. En español e inglés.`},
-    {key:"calendar",label:"Plan semanal",icon:"📅",prompt:`Crea un plan de contenido semanal (lunes a viernes) para "${cName}" (${cServices}). Para cada día: plataforma, tipo, hora, descripción. En español.`},
-    {key:"strategy",label:"Estrategia",icon:"🧠",prompt:`Diseña una estrategia de marketing digital de 3 meses para "${cName}" (${cServices}). Incluye: objetivos SMART, canales, tipo de contenido, frecuencia, KPIs a medir. En español.`},
-    {key:"email",label:"Email marketing",icon:"📧",prompt:`Escribe 3 emails de marketing para "${cName}" (${cServices}): 1) Bienvenida, 2) Promoción, 3) Re-engagement. En español, con asunto y cuerpo.`},
-    {key:"custom",label:"Personalizado",icon:"🎯"}];
 
-  const generate=async(prompt)=>{
-    setLoading(true);setResult("");
-    try{const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt})});const d=await r.json();setResult(d.text||d.error||"Sin respuesta")}catch(e){setResult("Error: "+e.message)}
+  const textModes=[
+    {key:"ideas",label:"Ideas de posts",icon:"💡",prompt:`Genera 10 ideas de posts para redes sociales para "${cName}". Servicios: ${cServices}. En español. Incluye tipo (reel, carrusel, imagen, story), descripción y caption sugerido para cada uno.`},
+    {key:"captions",label:"Captions + imagen",icon:"✍️",mode:"text_and_image",prompt:`Escribe 1 caption creativo y profesional para un post de Instagram para "${cName}" (${cServices}). Incluye emojis, call to action, y 10 hashtags relevantes. En español. Máximo 200 palabras.`},
+    {key:"hashtags",label:"Hashtags",icon:"#️⃣",prompt:`Genera 30 hashtags para "${cName}" (${cServices}). Agrúpalos: 10 de nicho, 10 alcance medio, 10 populares. En español e inglés.`},
+    {key:"calendar",label:"Plan semanal",icon:"📅",prompt:`Crea un plan de contenido semanal (lunes a viernes) para "${cName}" (${cServices}). Cada día: plataforma, tipo, hora, descripción, caption sugerido. En español.`},
+    {key:"strategy",label:"Estrategia",icon:"🧠",prompt:`Diseña una estrategia de marketing digital de 3 meses para "${cName}" (${cServices}). Objetivos SMART, canales, contenido, frecuencia, KPIs. En español.`},
+    {key:"email",label:"Emails",icon:"📧",prompt:`Escribe 3 emails de marketing para "${cName}" (${cServices}): Bienvenida, Promoción, Re-engagement. Con asunto y cuerpo. En español.`},
+    {key:"image",label:"Generar imagen",icon:"🎨",mode:"image"},
+    {key:"post_complete",label:"Post completo",icon:"🚀",mode:"text_and_image",prompt:`Escribe un caption perfecto para Instagram para "${cName}" (${cServices}). Incluye: hook que capture atención, cuerpo con valor, call to action, 3 emojis, 10 hashtags. En español. Máximo 150 palabras.`},
+    {key:"custom",label:"Personalizado",icon:"🎯"}
+  ];
+
+  const generate=async(prompt,apiMode)=>{
+    setLoading(true);setResult("");setImageUrl("");
+    try{
+      const body={prompt,mode:apiMode||"text"};
+      const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const d=await r.json();
+      if(d.error){setResult("Error: "+d.error);setLoading(false);return}
+      if(d.text)setResult(d.text);
+      if(d.imageUrl)setImageUrl(d.imageUrl);
+      if(d.revised&&!d.text)setResult(d.revised);
+    }catch(e){setResult("Error: "+e.message)}
     setLoading(false);
   };
 
+  const selectedMode=textModes.find(m=>m.key===mode);
+
   return<div>
-    {/* Client selector */}
     <div style={{marginBottom:16}}>
       <label style={{fontSize:11,fontWeight:600,color:C.tm,fontFamily:F,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5,display:"block"}}>Generar para:</label>
       <select value={selClient} onChange={e=>setSelClient(e.target.value)} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:8,padding:"9px 12px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",cursor:"pointer"}}>
@@ -355,23 +371,37 @@ function FAIAssist({clients}){
       </select>
     </div>
 
-    {/* Mode selector */}
     <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-      {modes.map(m=><button key={m.key} onClick={()=>setMode(m.key)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${mode===m.key?C.acc:C.b}`,background:mode===m.key?C.acc+"15":"transparent",color:mode===m.key?C.acc:C.tm,cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:F}}>{m.icon} {m.label}</button>)}
+      {textModes.map(m=><button key={m.key} onClick={()=>setMode(m.key)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${mode===m.key?C.acc:C.b}`,background:mode===m.key?C.acc+"15":"transparent",color:mode===m.key?C.acc:C.tm,cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:F}}>{m.icon} {m.label}</button>)}
     </div>
 
-    {mode==="custom"?<div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <Txt label="Escribe tu prompt" value={custom} onChange={e=>setCustom(e.target.value)} placeholder={`Ejemplo: Escribe un artículo de blog sobre tendencias de ${cServices} para 2026...`}/>
-      <Btn onClick={()=>generate(custom)} disabled={!custom||loading} style={{width:"100%",justifyContent:"center"}}>{loading?"Generando...":"🤖 Generar"}</Btn>
-    </div>:
-    <Btn onClick={()=>generate(modes.find(m=>m.key===mode)?.prompt)} disabled={loading} style={{width:"100%",justifyContent:"center"}}>{loading?"Generando...":"🤖 Generar "+modes.find(m=>m.key===mode)?.label}</Btn>}
+    {mode==="image"&&<div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:10}}>
+      <Txt label="Describe la imagen que quieres" value={imgPrompt} onChange={e=>setImgPrompt(e.target.value)} placeholder={`Ej: Post profesional para ${cName} sobre promoción de servicios, colores azul marino y dorado, estilo moderno y minimalista`}/>
+      <Btn onClick={()=>generate(imgPrompt||`Professional social media post for "${cName}", ${cServices}, modern minimalist design, navy blue and gold colors, brand-friendly`,"image")} disabled={loading} style={{width:"100%",justifyContent:"center"}}>{loading?"Generando imagen...":"🎨 Generar imagen"}</Btn>
+    </div>}
 
-    {result&&<div style={{marginTop:16,background:C.bg,borderRadius:10,border:`1px solid ${C.b}`,padding:16,maxHeight:500,overflow:"auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <span style={{fontSize:11,fontWeight:600,color:C.acc}}>Resultado:</span>
-        <button onClick={()=>{navigator.clipboard.writeText(result);alert("Copiado al portapapeles")}} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"3px 10px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>📋 Copiar</button>
+    {mode==="custom"&&<div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:10}}>
+      <Txt label="Tu prompt personalizado" value={custom} onChange={e=>setCustom(e.target.value)} placeholder={`Ej: Escribe un artículo de blog sobre tendencias de ${cServices}...`}/>
+      <Btn onClick={()=>generate(custom)} disabled={!custom||loading} style={{width:"100%",justifyContent:"center"}}>{loading?"Generando...":"🤖 Generar"}</Btn>
+    </div>}
+
+    {mode!=="image"&&mode!=="custom"&&<Btn onClick={()=>generate(selectedMode?.prompt,selectedMode?.mode)} disabled={loading} style={{width:"100%",justifyContent:"center",marginBottom:10}}>{loading?(selectedMode?.mode==="text_and_image"?"Generando texto + imagen...":"Generando..."):`${selectedMode?.icon} Generar ${selectedMode?.label}`}</Btn>}
+
+    {/* RESULTS */}
+    {(result||imageUrl)&&<div style={{marginTop:10,background:C.bg,borderRadius:10,border:`1px solid ${C.b}`,padding:16,maxHeight:600,overflow:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <span style={{fontSize:12,fontWeight:600,color:C.acc,fontFamily:D}}>Resultado</span>
+        <div style={{display:"flex",gap:6}}>
+          {result&&<button onClick={()=>{navigator.clipboard.writeText(result);alert("Texto copiado")}} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"3px 10px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>📋 Copiar texto</button>}
+          {imageUrl&&<a href={imageUrl} download target="_blank" rel="noopener noreferrer" style={{background:C.acc+"20",border:`1px solid ${C.acc}30`,borderRadius:6,padding:"3px 10px",color:C.acc,cursor:"pointer",fontSize:10,fontFamily:F,textDecoration:"none"}}>⬇️ Descargar imagen</a>}
+        </div>
       </div>
-      <pre style={{fontSize:12,color:C.tx,lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:F,margin:0}}>{result}</pre>
+
+      {imageUrl&&<div style={{marginBottom:12,borderRadius:10,overflow:"hidden",border:`1px solid ${C.b}`}}>
+        <img src={imageUrl} alt="Generated" style={{width:"100%",display:"block"}}/>
+      </div>}
+
+      {result&&<pre style={{fontSize:12,color:C.tx,lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:F,margin:0}}>{result}</pre>}
     </div>}
   </div>;
 }
