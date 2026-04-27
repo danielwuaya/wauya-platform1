@@ -135,7 +135,7 @@ export default function App(){
   if(user?.role==="client"){const cl=clients.find(x=>x.id===user.client_id);if(!cl)return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div style={{textAlign:"center"}}><div style={{fontSize:48,marginBottom:16}}>🔒</div><h2 style={{fontFamily:D,color:C.tx}}>Sin acceso</h2><Btn onClick={logout} style={{marginTop:16}}>Salir</Btn></div></div>;return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh"}}><style>{CSS}</style><div style={{borderBottom:`1px solid ${C.b}`,padding:isMobile?"10px 16px":"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontFamily:D,fontSize:22,fontWeight:800,color:C.tx}}>W<span style={{color:C.acc}}>.</span></span><span style={{color:C.td}}>|</span><span style={{fontSize:13,color:C.tm}}>Portal Cliente</span></div><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontSize:12,color:C.tm}}>{user.name}</span><Btn onClick={logout} v="ghost" icon="out" sz="sm">Salir</Btn></div></div><div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"20px 16px":"36px 20px",animation:"fadeUp .4s ease"}}><h1 style={{fontFamily:D,fontSize:isMobile?22:26,fontWeight:700,color:C.tx,marginBottom:6}}>Hola, {user.name} 👋</h1><p style={{fontSize:13,color:C.tm,marginBottom:28}}>Portal de {cl.company||cl.name}</p><Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx}}>Estado</h3><SBadge status={cl.status}/></div><div style={{display:"flex",gap:3,borderRadius:6,overflow:"hidden"}}>{STATUS_OPTS.map((s,i)=><div key={s.value} style={{flex:1,height:5,background:i<=STATUS_OPTS.findIndex(x=>x.value===cl.status)?s.color:C.b}}/>)}</div></Card><Card style={{marginBottom:20}}><Approvals clientId={cl.id} readOnly/></Card>{cl.sheet_id&&<Card style={{marginBottom:20}}><KPIDashboard sheetId={cl.sheet_id} readOnly/></Card>}{cl.calendar_sheet_id&&<Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:14}}>📅 Calendario</h3><ContentCalendar sheetId={cl.calendar_sheet_id} readOnly/></Card>}<Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:16}}>Entregables ({clientFiles(cl.id).length})</h3>{clientFiles(cl.id).length===0?<Empty icon="📦" title="Sin entregables"/>:<div style={{display:"flex",flexDirection:"column",gap:8}}>{clientFiles(cl.id).map(fl=><FileCard key={fl.id} file={fl} showDel={false}/>)}</div>}</Card>{cl.drive_folder_id&&<Card><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:14}}>📂 Archivos</h3><DriveFiles ownerType="client" ownerId={cl.id} currentFolderId={cl.drive_folder_id} readOnly/></Card>}</div></div>}
 
   // ═══ ADMIN ═══
-  const nav=[{key:"dashboard",label:"Dashboard",icon:"dash"},{key:"pipeline",label:"Pipeline",icon:"pipe",cnt:prospects.length},{key:"prospects",label:"Prospectos",icon:"prosp"},{key:"clients",label:"Clientes",icon:"cli",cnt:clients.length},{key:"employees",label:"Empleados",icon:"emp",cnt:employees.length},{key:"timeline",label:"Cronograma",icon:"cal",cnt:todos.filter(t=>t.status!=="completado").length},{key:"gastos",label:"Gastos",icon:"dollar"},{key:"ai",label:"Asistente AI",icon:"todo"},{key:"users",label:"Usuarios",icon:"usr"},{key:"settings",label:"Configuración",icon:"lock"}];
+  const nav=[{key:"dashboard",label:"Dashboard",icon:"dash"},{key:"pipeline",label:"Pipeline",icon:"pipe",cnt:prospects.length},{key:"prospects",label:"Prospectos",icon:"prosp"},{key:"clients",label:"Clientes",icon:"cli",cnt:clients.length},{key:"employees",label:"Empleados",icon:"emp",cnt:employees.length},{key:"timeline",label:"Cronograma",icon:"cal",cnt:todos.filter(t=>t.status!=="completado").length},{key:"gastos",label:"Gastos",icon:"dollar"},{key:"users",label:"Usuarios",icon:"usr"},{key:"settings",label:"Configuración",icon:"lock"}];
   const sp=prospects.find(p=>p.id===selId);const sc=clients.find(x=>x.id===selId);
   const filt=l=>l.filter(x=>(x.name+(x.company||"")+(x.email||"")).toLowerCase().includes(search.toLowerCase()));
   const pad=isMobile?"16px":"24px 32px";const g1=isMobile?"1fr":"1fr 1fr";
@@ -217,9 +217,6 @@ export default function App(){
       {/* USERS */}
       {/* GASTOS */}
       {view==="gastos"&&<div><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx,marginBottom:4}}>Gastos</h1><p style={{fontSize:13,color:C.tm,marginBottom:20}}>Control de gastos desde Google Sheets</p><Card><Expenses sheetId={localStorage.getItem("wauya_expense_sheet")||null} onLink={async sid=>{localStorage.setItem("wauya_expense_sheet",sid)}} onUnlink={()=>{localStorage.removeItem("wauya_expense_sheet")}}/></Card></div>}
-
-      {/* AI ASSISTANT - solo admin */}
-      {view==="ai"&&<div><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx,marginBottom:4}}>Asistente AI</h1><p style={{fontSize:13,color:C.tm,marginBottom:20}}>Genera contenido, ideas y estrategias con inteligencia artificial</p><Card><FAIAssist clients={clients}/></Card></div>}
 
       {view==="users"&&<div><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx,marginBottom:20}}>Usuarios</h1><Card style={{marginBottom:16}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.acc,marginBottom:12}}>Master</h3><div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`,flexWrap:"wrap"}}><div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.acc},${C.accD})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:C.bg}}>A</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{user?.name||"Admin"}</div><div style={{fontSize:10,color:C.td}}>{user?.email}</div></div><Badge label="MASTER" color={C.acc}/><Btn onClick={()=>setView("settings")} v="ghost" sz="sm" icon="edit">Editar</Btn></div></Card><Card style={{marginBottom:16}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:12}}>Empleados ({employees.length})</h3>{employees.length===0?<p style={{fontSize:11,color:C.td}}>Sin empleados</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{employees.map(e=><div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`,flexWrap:"wrap"}}><div style={{width:26,height:26,borderRadius:6,background:C.pBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:C.p}}>{e.name?.charAt(0)?.toUpperCase()}</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{e.name}</div><div style={{fontSize:10,color:C.td}}>{e.email} · 🔑 {e.password}</div></div><Badge label="EMPLEADO" color={C.p}/><Btn onClick={()=>setModal({type:"edit_user",table:"employees",user:e})} v="ghost" sz="sm" icon="edit"/></div>)}</div>}</Card><Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:12}}>Clientes ({clientUsers.length})</h3>{clientUsers.length===0?<p style={{fontSize:11,color:C.td}}>Sin usuarios</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientUsers.map(u=>{const cl=clients.find(x=>x.id===u.client_id);return<div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`,flexWrap:"wrap"}}><div style={{width:26,height:26,borderRadius:6,background:C.blBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:C.bl}}>{u.name?.charAt(0)?.toUpperCase()}</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{u.name}</div><div style={{fontSize:10,color:C.td}}>{u.email} · {cl?.company||"—"} · 🔑 {u.password}</div></div><Badge label="CLIENTE" color={C.bl}/><Btn onClick={()=>setModal({type:"edit_user",table:"client_users",user:u})} v="ghost" sz="sm" icon="edit"/></div>})}</div>}</Card></div>}
 
@@ -318,90 +315,5 @@ function FOnboarding({prospect,onDone,onX}){
           onDone(prospect.id,{services:f.services,notes,monthly_fee:parseFloat(f.monthly_fee)||0,billing_day:parseInt(f.billing_day)||1})
         }}>✅ Crear cliente</Btn>}
     </div>
-  </div>;
-}
-
-// ─── AI CONTENT ASSISTANT (OpenAI GPT + DALL-E) ───
-function FAIAssist({clients}){
-  const[selClient,setSelClient]=useState("");
-  const[mode,setMode]=useState("ideas");
-  const[result,setResult]=useState("");
-  const[imageUrl,setImageUrl]=useState("");
-  const[loading,setLoading]=useState(false);
-  const[custom,setCustom]=useState("");
-  const[imgPrompt,setImgPrompt]=useState("");
-  const cl=clients.find(c=>c.id===selClient);
-  const cName=cl?.company||cl?.name||"tu agencia";
-  const cServices=cl?.services||"marketing digital";
-
-  const textModes=[
-    {key:"ideas",label:"Ideas de posts",icon:"💡",prompt:`Genera 10 ideas de posts para redes sociales para "${cName}". Servicios: ${cServices}. En español. Incluye tipo (reel, carrusel, imagen, story), descripción y caption sugerido para cada uno.`},
-    {key:"captions",label:"Captions + imagen",icon:"✍️",mode:"text_and_image",prompt:`Escribe 1 caption creativo y profesional para un post de Instagram para "${cName}" (${cServices}). Incluye emojis, call to action, y 10 hashtags relevantes. En español. Máximo 200 palabras.`},
-    {key:"hashtags",label:"Hashtags",icon:"#️⃣",prompt:`Genera 30 hashtags para "${cName}" (${cServices}). Agrúpalos: 10 de nicho, 10 alcance medio, 10 populares. En español e inglés.`},
-    {key:"calendar",label:"Plan semanal",icon:"📅",prompt:`Crea un plan de contenido semanal (lunes a viernes) para "${cName}" (${cServices}). Cada día: plataforma, tipo, hora, descripción, caption sugerido. En español.`},
-    {key:"strategy",label:"Estrategia",icon:"🧠",prompt:`Diseña una estrategia de marketing digital de 3 meses para "${cName}" (${cServices}). Objetivos SMART, canales, contenido, frecuencia, KPIs. En español.`},
-    {key:"email",label:"Emails",icon:"📧",prompt:`Escribe 3 emails de marketing para "${cName}" (${cServices}): Bienvenida, Promoción, Re-engagement. Con asunto y cuerpo. En español.`},
-    {key:"image",label:"Generar imagen",icon:"🎨",mode:"image"},
-    {key:"post_complete",label:"Post completo",icon:"🚀",mode:"text_and_image",prompt:`Escribe un caption perfecto para Instagram para "${cName}" (${cServices}). Incluye: hook que capture atención, cuerpo con valor, call to action, 3 emojis, 10 hashtags. En español. Máximo 150 palabras.`},
-    {key:"custom",label:"Personalizado",icon:"🎯"}
-  ];
-
-  const generate=async(prompt,apiMode)=>{
-    setLoading(true);setResult("");setImageUrl("");
-    try{
-      const body={prompt,mode:apiMode||"text"};
-      const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-      const d=await r.json();
-      if(d.error){setResult("Error: "+d.error);setLoading(false);return}
-      if(d.text)setResult(d.text);
-      if(d.imageUrl)setImageUrl(d.imageUrl);
-      if(d.revised&&!d.text)setResult(d.revised);
-    }catch(e){setResult("Error: "+e.message)}
-    setLoading(false);
-  };
-
-  const selectedMode=textModes.find(m=>m.key===mode);
-
-  return<div>
-    <div style={{marginBottom:16}}>
-      <label style={{fontSize:11,fontWeight:600,color:C.tm,fontFamily:F,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5,display:"block"}}>Generar para:</label>
-      <select value={selClient} onChange={e=>setSelClient(e.target.value)} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:8,padding:"9px 12px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",cursor:"pointer"}}>
-        <option value="">— Wauya en general —</option>
-        {clients.map(c=><option key={c.id} value={c.id}>{c.company||c.name}</option>)}
-      </select>
-    </div>
-
-    <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-      {textModes.map(m=><button key={m.key} onClick={()=>setMode(m.key)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${mode===m.key?C.acc:C.b}`,background:mode===m.key?C.acc+"15":"transparent",color:mode===m.key?C.acc:C.tm,cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:F}}>{m.icon} {m.label}</button>)}
-    </div>
-
-    {mode==="image"&&<div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:10}}>
-      <Txt label="Describe la imagen que quieres" value={imgPrompt} onChange={e=>setImgPrompt(e.target.value)} placeholder={`Ej: Post profesional para ${cName} sobre promoción de servicios, colores azul marino y dorado, estilo moderno y minimalista`}/>
-      <Btn onClick={()=>generate(imgPrompt||`Professional social media post for "${cName}", ${cServices}, modern minimalist design, navy blue and gold colors, brand-friendly`,"image")} disabled={loading} style={{width:"100%",justifyContent:"center"}}>{loading?"Generando imagen...":"🎨 Generar imagen"}</Btn>
-    </div>}
-
-    {mode==="custom"&&<div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:10}}>
-      <Txt label="Tu prompt personalizado" value={custom} onChange={e=>setCustom(e.target.value)} placeholder={`Ej: Escribe un artículo de blog sobre tendencias de ${cServices}...`}/>
-      <Btn onClick={()=>generate(custom)} disabled={!custom||loading} style={{width:"100%",justifyContent:"center"}}>{loading?"Generando...":"🤖 Generar"}</Btn>
-    </div>}
-
-    {mode!=="image"&&mode!=="custom"&&<Btn onClick={()=>generate(selectedMode?.prompt,selectedMode?.mode)} disabled={loading} style={{width:"100%",justifyContent:"center",marginBottom:10}}>{loading?(selectedMode?.mode==="text_and_image"?"Generando texto + imagen...":"Generando..."):`${selectedMode?.icon} Generar ${selectedMode?.label}`}</Btn>}
-
-    {/* RESULTS */}
-    {(result||imageUrl)&&<div style={{marginTop:10,background:C.bg,borderRadius:10,border:`1px solid ${C.b}`,padding:16,maxHeight:600,overflow:"auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <span style={{fontSize:12,fontWeight:600,color:C.acc,fontFamily:D}}>Resultado</span>
-        <div style={{display:"flex",gap:6}}>
-          {result&&<button onClick={()=>{navigator.clipboard.writeText(result);alert("Texto copiado")}} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"3px 10px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>📋 Copiar texto</button>}
-          {imageUrl&&<a href={imageUrl} download target="_blank" rel="noopener noreferrer" style={{background:C.acc+"20",border:`1px solid ${C.acc}30`,borderRadius:6,padding:"3px 10px",color:C.acc,cursor:"pointer",fontSize:10,fontFamily:F,textDecoration:"none"}}>⬇️ Descargar imagen</a>}
-        </div>
-      </div>
-
-      {imageUrl&&<div style={{marginBottom:12,borderRadius:10,overflow:"hidden",border:`1px solid ${C.b}`}}>
-        <img src={imageUrl} alt="Generated" style={{width:"100%",display:"block"}}/>
-      </div>}
-
-      {result&&<pre style={{fontSize:12,color:C.tx,lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:F,margin:0}}>{result}</pre>}
-    </div>}
   </div>;
 }
