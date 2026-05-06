@@ -55,9 +55,9 @@ export default function App(){
   const[mobileMenu,setMM]=useState(false);const[globalSearch,setGS]=useState("");const[gsOpen,setGSOpen]=useState(false);
   const[notifOpen,setNO]=useState(false);const[approvals,setApprovals]=useState([]);
   // LOT 2 STATE
-  const[timeEntries,setTE]=useState([]);const[templates,setTemplates]=useState([]);const[activityLog,setAL]=useState([]);
+  const[timeEntries,setTE]=useState([]);const[templates,setTemplates]=useState([]);const[activityLog,setAL]=useState([]);const[clientServices,setCS]=useState([]);
 
-  const loadAll=useCallback(async()=>{const[p,cl,em,cu,td,fl,ap,te,tp,al]=await Promise.all([supabase.from("prospects").select("*").order("created_at",{ascending:false}),supabase.from("clients").select("*").order("created_at",{ascending:false}),supabase.from("employees").select("*").order("created_at",{ascending:false}),supabase.from("client_users").select("*"),supabase.from("todos").select("*").order("created_at",{ascending:false}),supabase.from("files").select("*").order("created_at",{ascending:false}),supabase.from("approvals").select("*").order("created_at",{ascending:false}),supabase.from("time_entries").select("*").order("created_at",{ascending:false}),supabase.from("task_templates").select("*").order("name"),supabase.from("activity_log").select("*").order("created_at",{ascending:false}).limit(50)]);if(p.data)setProspects(p.data);if(cl.data)setClients(cl.data);if(em.data)setEmployees(em.data);if(cu.data)setCU(cu.data);if(td.data)setTodos(td.data);if(fl.data)setFiles(fl.data);if(ap.data)setApprovals(ap.data);if(te.data)setTE(te.data);if(tp.data)setTemplates(tp.data);if(al.data)setAL(al.data)},[]);
+  const loadAll=useCallback(async()=>{const[p,cl,em,cu,td,fl,ap,te,tp,al,cs]=await Promise.all([supabase.from("prospects").select("*").order("created_at",{ascending:false}),supabase.from("clients").select("*").order("created_at",{ascending:false}),supabase.from("employees").select("*").order("created_at",{ascending:false}),supabase.from("client_users").select("*"),supabase.from("todos").select("*").order("created_at",{ascending:false}),supabase.from("files").select("*").order("created_at",{ascending:false}),supabase.from("approvals").select("*").order("created_at",{ascending:false}),supabase.from("time_entries").select("*").order("created_at",{ascending:false}),supabase.from("task_templates").select("*").order("name"),supabase.from("activity_log").select("*").order("created_at",{ascending:false}).limit(50),supabase.from("client_services").select("*").order("created_at",{ascending:false})]);if(p.data)setProspects(p.data);if(cl.data)setClients(cl.data);if(em.data)setEmployees(em.data);if(cu.data)setCU(cu.data);if(td.data)setTodos(td.data);if(fl.data)setFiles(fl.data);if(ap.data)setApprovals(ap.data);if(te.data)setTE(te.data);if(tp.data)setTemplates(tp.data);if(al.data)setAL(al.data);if(cs.data)setCS(cs.data)},[]);
   useEffect(()=>{const sess=localStorage.getItem("wauya_user");if(sess)try{setUser(JSON.parse(sess))}catch{}loadAll().finally(()=>setLoading(false))},[loadAll]);
 
   // Activity logger
@@ -117,17 +117,23 @@ export default function App(){
 
   const prospFiles=pid=>files.filter(f=>f.owner_type==="prospect"&&f.owner_id===pid);
   const clientFiles=cid=>files.filter(f=>f.owner_type==="client"&&f.owner_id===cid);
-  const totalRevenue=clients.reduce((s,c)=>s+(parseFloat(c.monthly_fee)||0),0);
+  const totalRevenue=clientServices.filter(s=>s.status==="activo").reduce((s,sv)=>s+(parseFloat(sv.monthly_amount)||0),0);
+  const totalOnetime=clientServices.filter(s=>s.onetime_paid).reduce((s,sv)=>s+(parseFloat(sv.onetime_amount)||0),0);
+  const totalPendingOnetime=clientServices.filter(s=>!s.onetime_paid&&s.onetime_amount>0).reduce((s,sv)=>s+(parseFloat(sv.onetime_amount)||0),0);
   const totalHours=timeEntries.reduce((s,t)=>s+(parseFloat(t.hours)||0),0);
 
   // PROFITABILITY per client
   const clientProfit=useMemo(()=>clients.map(cl=>{
     const hours=timeEntries.filter(t=>t.client_id===cl.id).reduce((s,t)=>s+(parseFloat(t.hours)||0),0);
     const cost=timeEntries.filter(t=>t.client_id===cl.id).reduce((s,t)=>{const emp=employees.find(e=>e.id===t.employee_id);return s+((parseFloat(t.hours)||0)*(parseFloat(emp?.hourly_rate)||0))},0);
-    const revenue=parseFloat(cl.monthly_fee)||0;
+    const svcs=clientServices.filter(s=>s.client_id===cl.id);
+    const monthly=svcs.filter(s=>s.status==="activo").reduce((s,sv)=>s+(parseFloat(sv.monthly_amount)||0),0);
+    const onetime=svcs.reduce((s,sv)=>s+(parseFloat(sv.onetime_amount)||0),0);
+    const onetimePaid=svcs.filter(s=>s.onetime_paid).reduce((s,sv)=>s+(parseFloat(sv.onetime_amount)||0),0);
+    const revenue=monthly;
     const margin=revenue>0?Math.round(((revenue-cost)/revenue)*100):0;
-    return{...cl,hours,cost,revenue,margin};
-  }),[clients,timeEntries,employees]);
+    return{...cl,hours,cost,revenue,monthly,onetime,onetimePaid,margin,svcs};
+  }),[clients,timeEntries,employees,clientServices]);
 
   const stats=useMemo(()=>{const tt=todos.length,ct=todos.filter(x=>x.status==="completado").length,pt=todos.filter(x=>x.status==="pendiente").length,ip=todos.filter(x=>x.status==="en_progreso").length;const sc=STATUS_OPTS.map(s=>({...s,count:clients.filter(x=>x.status===s.value).length}));const el=employees.map(e=>({...e,tc:todos.filter(td=>td.assigned_to===e.id&&td.status!=="completado").length,hrs:timeEntries.filter(t=>t.employee_id===e.id).reduce((s,t)=>s+(parseFloat(t.hours)||0),0)}));return{tt,ct,pt,ip,sc,el}},[todos,clients,employees,timeEntries]);
 
@@ -166,7 +172,7 @@ export default function App(){
 
       {/* DASHBOARD with profitability + activity */}
       {view==="dashboard"&&<div><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx,marginBottom:4}}>Dashboard</h1><p style={{fontSize:13,color:C.tm,marginBottom:24}}>Vista general</p>
-        <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:24}}><Stat label="Prospectos" value={prospects.length} icon="🎯" color={C.w}/><Stat label="Clientes" value={clients.length} icon="💼" color={C.acc}/><Stat label="Tareas" value={todos.filter(t=>t.status!=="completado").length} icon="📋" color={C.bl}/><Stat label="Revenue" value={"$"+totalRevenue.toLocaleString()} icon="💰" color={C.g} sub="Mensual total"/><Stat label="Horas" value={totalHours.toFixed(0)} icon="⏱" color={C.p} sub="Este periodo"/></div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:24}}><Stat label="Prospectos" value={prospects.length} icon="🎯" color={C.w}/><Stat label="Clientes" value={clients.length} icon="💼" color={C.acc}/><Stat label="Tareas" value={todos.filter(t=>t.status!=="completado").length} icon="📋" color={C.bl}/><Stat label="Mensual" value={"$"+totalRevenue.toLocaleString()} icon="💰" color={C.g} sub="Recurrente/mes"/><Stat label="Cobrado" value={"$"+totalOnetime.toLocaleString()} icon="✅" color={C.p} sub="Pagos únicos"/>{totalPendingOnetime>0&&<Stat label="Pendiente" value={"$"+totalPendingOnetime.toLocaleString()} icon="⏳" color={C.w} sub="Únicos por cobrar"/>}<Stat label="Horas" value={totalHours.toFixed(0)} icon="⏱" color={C.bl} sub="Este periodo"/></div>
         <div style={{display:"grid",gridTemplateColumns:g1,gap:16,marginBottom:20}}>
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.tx,marginBottom:16}}>Proyectos</h3><div style={{display:"flex",alignItems:"center",gap:20}}><Donut data={stats.sc.map(s=>({value:s.count,color:s.color}))}/><div style={{display:"flex",flexDirection:"column",gap:5}}>{stats.sc.map(s=><div key={s.value} style={{display:"flex",alignItems:"center",gap:7,fontSize:11}}><div style={{width:8,height:8,borderRadius:2,background:s.color}}/><span style={{color:C.tm}}>{s.label}</span><span style={{color:C.tx,fontWeight:700,marginLeft:"auto"}}>{s.count}</span></div>)}</div></div></Card>
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.tx,marginBottom:16}}>Rentabilidad por cliente</h3>{clientProfit.filter(c=>c.revenue>0||c.hours>0).length===0?<p style={{fontSize:12,color:C.td}}>Sin datos aún</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientProfit.filter(c=>c.revenue>0||c.hours>0).slice(0,5).map(cp=><div key={cp.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}><span style={{flex:1,color:C.tx,fontWeight:500}}>{cp.company||cp.name}</span><span style={{color:C.g}}>💰${cp.revenue}</span><span style={{color:C.p}}>⏱{cp.hours.toFixed(1)}h</span><span style={{color:cp.margin>=50?C.g:cp.margin>=20?C.w:C.r,fontWeight:700}}>{cp.margin}%</span></div>)}</div>}</Card>
@@ -193,18 +199,41 @@ export default function App(){
       </div>}
 
       {/* CLIENTS LIST */}
-      {view==="clients"&&!selId&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Clientes</h1><Btn onClick={()=>setModal("add_client")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div><div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>{filt(clients).length===0?<Empty icon="💼" title="Sin clientes"/>:<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>{filt(clients).map(cl=>{const cp=clientProfit.find(x=>x.id===cl.id);return<Card key={cl.id} hover onClick={()=>setSelId(cl.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{cl.company||cl.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{cl.name}</div></div><SBadge status={cl.status}/></div>{cl.services&&<div style={{fontSize:11,color:C.td,marginBottom:6}}>🎯 {cl.services}</div>}<div style={{display:"flex",gap:10,fontSize:10,color:C.td,flexWrap:"wrap"}}><span><Ic n="todo" sz={11}/>{todos.filter(td=>td.client_id===cl.id).length}</span>{cl.monthly_fee>0&&<span style={{color:C.g}}>💰${cl.monthly_fee}/mes</span>}{cp&&cp.hours>0&&<span style={{color:C.p}}>⏱{cp.hours.toFixed(1)}h</span>}{cl.billing_status&&cl.billing_status!=="activo"&&<Badge label={BILL_STATUS.find(b=>b.value===cl.billing_status)?.label} color={BILL_STATUS.find(b=>b.value===cl.billing_status)?.color}/>}</div></Card>})}</div>}</div>}
+      {view==="clients"&&!selId&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Clientes</h1><Btn onClick={()=>setModal("add_client")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div><div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>{filt(clients).length===0?<Empty icon="💼" title="Sin clientes"/>:<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>{filt(clients).map(cl=>{const cp=clientProfit.find(x=>x.id===cl.id);return<Card key={cl.id} hover onClick={()=>setSelId(cl.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{cl.company||cl.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{cl.name}</div></div><SBadge status={cl.status}/></div>{cl.services&&<div style={{fontSize:11,color:C.td,marginBottom:6}}>🎯 {cl.services}</div>}<div style={{display:"flex",gap:10,fontSize:10,color:C.td,flexWrap:"wrap"}}><span><Ic n="todo" sz={11}/>{todos.filter(td=>td.client_id===cl.id).length}</span>{cp&&cp.monthly>0&&<span style={{color:C.g}}>💰${cp.monthly}/mes</span>}{cp&&cp.onetime>0&&<span style={{color:C.p}}>{cp.onetimePaid>=cp.onetime?"✅":"⏳"}${cp.onetime} único</span>}{cp&&cp.hours>0&&<span style={{color:C.bl}}>⏱{cp.hours.toFixed(1)}h</span>}</div></Card>})}</div>}</div>}
 
       {/* CLIENT DETAIL with templates + time */}
       {view==="clients"&&selId&&sc&&<div>
         <button onClick={()=>setSelId(null)} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:C.tm,cursor:"pointer",fontSize:12,marginBottom:18,padding:0,fontFamily:F}}><Ic n="back" sz={15}/>Volver</button>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24,flexWrap:"wrap",gap:8}}><div><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx,cursor:"text",borderBottom:`1px dashed ${C.b}`,paddingBottom:2}} contentEditable suppressContentEditableWarning onBlur={e=>{const v=e.target.innerText.trim();if(v&&v!==(sc.company||sc.name))updClient(sc.id,{company:v})}}>{sc.company||sc.name}</h1><p style={{fontSize:12,color:C.tm,marginTop:2}}><span contentEditable suppressContentEditableWarning style={{borderBottom:`1px dashed ${C.b}`,cursor:"text"}} onBlur={e=>{const v=e.target.innerText.trim();if(v&&v!==sc.name)updClient(sc.id,{name:v})}}>{sc.name}</span> · {sc.email}</p></div><div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><Btn onClick={()=>handleQBR(sc)} v="secondary" sz="sm">📊 QBR</Btn><Btn onClick={()=>setModal({type:"apply_template",targetType:"client",targetId:sc.id})} v="secondary" sz="sm" icon="copy">Template</Btn><Sel value={sc.status} onChange={e=>updClient(sc.id,{status:e.target.value})} options={STATUS_OPTS} style={{fontSize:11,padding:"6px 10px"}}/><Btn onClick={()=>delClient(sc.id)} v="danger" sz="sm" icon="tr"/></div></div>
         {/* Profitability bar */}
-        {(()=>{const cp=clientProfit.find(x=>x.id===sc.id);if(!cp)return null;return(cp.revenue>0||cp.hours>0)&&<div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}><Stat label="Revenue" value={"$"+cp.revenue} icon="💰" color={C.g}/><Stat label="Horas" value={cp.hours.toFixed(1)} icon="⏱" color={C.p}/><Stat label="Costo" value={"$"+cp.cost.toFixed(0)} icon="📉" color={C.w}/><Stat label="Margen" value={cp.margin+"%"} icon="📊" color={cp.margin>=50?C.g:cp.margin>=20?C.w:C.r}/></div>})()}
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14,marginBottom:20}}>
+        {(()=>{const cp=clientProfit.find(x=>x.id===sc.id);if(!cp)return null;return(cp.revenue>0||cp.hours>0||cp.onetime>0)&&<div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}><Stat label="Mensual" value={"$"+cp.monthly} icon="💰" color={C.g}/>{cp.onetime>0&&<Stat label="Único" value={"$"+cp.onetime} icon={cp.onetimePaid>=cp.onetime?"✅":"⏳"} color={cp.onetimePaid>=cp.onetime?C.g:C.w} sub={cp.onetimePaid>=cp.onetime?"Cobrado":"Pendiente"}/>}<Stat label="Horas" value={cp.hours.toFixed(1)} icon="⏱" color={C.p}/><Stat label="Costo" value={"$"+cp.cost.toFixed(0)} icon="📉" color={C.w}/><Stat label="Margen" value={cp.margin+"%"} icon="📊" color={cp.margin>=50?C.g:cp.margin>=20?C.w:C.r}/></div>})()}
+        <div style={{display:"grid",gridTemplateColumns:g1,gap:14,marginBottom:20}}>
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:10}}>Info</h3>{sc.phone&&<div style={{fontSize:12,color:C.tm,marginBottom:4}}>📱 {sc.phone}</div>}{sc.services&&<div style={{fontSize:12,color:C.tm}}>🎯 {sc.services}</div>}</Card>
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:10}}>Notas</h3><textarea value={sc.notes||""} onBlur={e=>updClient(sc.id,{notes:e.target.value})} onChange={e=>{const v=e.target.value;setClients(cl=>cl.map(x=>x.id===sc.id?{...x,notes:v}:x))}} placeholder="Notas..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:8,padding:8,color:C.tx,fontSize:12,fontFamily:F,outline:"none",resize:"vertical",minHeight:70}}/></Card>
-          <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:10}}><Ic n="dollar" sz={14}/> Facturación</h3><div style={{display:"flex",flexDirection:"column",gap:8}}><div><label style={{fontSize:10,color:C.tm}}>Fee mensual ($)</label><input type="number" value={sc.monthly_fee||0} onBlur={e=>updClient(sc.id,{monthly_fee:parseFloat(e.target.value)||0})} onChange={e=>{const v=e.target.value;setClients(cl=>cl.map(x=>x.id===sc.id?{...x,monthly_fee:v}:x))}} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",marginTop:4}}/></div><div><label style={{fontSize:10,color:C.tm}}>Estado</label><select value={sc.billing_status||"activo"} onChange={e=>updClient(sc.id,{billing_status:e.target.value})} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:12,fontFamily:F,outline:"none",marginTop:4}}>{BILL_STATUS.map(b=><option key={b.value} value={b.value}>{b.label}</option>)}</select></div></div></Card>
+        </div>
+        {/* SERVICES & BILLING */}
+        <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}><Ic n="dollar" sz={14}/> Servicios contratados ({clientServices.filter(s=>s.client_id===sc.id).length})</h3><Btn onClick={()=>setModal({type:"add_service",clientId:sc.id})} v="secondary" sz="sm" icon="plus">Agregar servicio</Btn></div>
+          {clientServices.filter(s=>s.client_id===sc.id).length===0?<p style={{fontSize:11,color:C.td}}>Sin servicios — agrega lo que le vendes a este cliente</p>:
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>{clientServices.filter(s=>s.client_id===sc.id).map(sv=>{
+            const typeLabel={mensual:"🔄 Mensual",unico:"💎 Pago único",mixto:"🔀 Mixto"}[sv.payment_type]||sv.payment_type;
+            const typeColor={mensual:C.g,unico:C.p,mixto:C.w}[sv.payment_type]||C.tm;
+            const statusColor={activo:C.g,pausado:C.td,completado:C.bl,cancelado:C.r}[sv.status]||C.td;
+            return<div key={sv.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:C.bg,borderRadius:10,border:`1px solid ${C.b}`,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:600,color:C.tx}}>{sv.service_name}</span><Badge label={typeLabel} color={typeColor}/><Badge label={sv.status} color={statusColor}/>{sv.currency==="CAD"&&<Badge label="CAD" color={C.bl}/>}</div>
+                <div style={{fontSize:10,color:C.td,marginTop:3,display:"flex",gap:10,flexWrap:"wrap"}}>
+                  {sv.monthly_amount>0&&<span style={{color:C.g}}>💰 ${sv.currency==="CAD"?"C":""}${sv.monthly_amount}/mes</span>}
+                  {sv.onetime_amount>0&&<span style={{color:sv.onetime_paid?C.g:C.w}}>{sv.onetime_paid?"✅":"⏳"} ${sv.currency==="CAD"?"C":""}${sv.onetime_amount} único</span>}
+                  {sv.start_date&&<span>📅 {sv.start_date}</span>}
+                  {sv.notes&&<span>📝 {sv.notes}</span>}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:3,flexShrink:0}}>
+                {sv.onetime_amount>0&&!sv.onetime_paid&&<Btn onClick={async()=>{await dbUpd("client_services",sv.id,{onetime_paid:true});await logAct("Marcó pago cobrado","service",sv.service_name)}} v="ghost" sz="sm">✅ Cobrar</Btn>}
+                <Btn onClick={()=>setModal({type:"edit_service",service:sv})} v="ghost" sz="sm" icon="edit"/>
+                <button onClick={async()=>{if(confirm("¿Eliminar servicio?"))await dbDel("client_services",sv.id)}} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:3}}><Ic n="tr" sz={13}/></button>
+              </div>
+            </div>})}</div>}</Card>
         </div>
         <Card style={{marginBottom:20}}><Approvals clientId={sc.id}/></Card>
         <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>Usuarios ({clientUsers.filter(u=>u.client_id===sc.id).length})</h3><Btn onClick={()=>setModal("add_cu")} v="secondary" sz="sm" icon="plus">Crear</Btn></div>{clientUsers.filter(u=>u.client_id===sc.id).length===0?<p style={{fontSize:11,color:C.td}}>Sin usuarios</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientUsers.filter(u=>u.client_id===sc.id).map(u=><div key={u.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{u.name}</div><div style={{fontSize:10,color:C.td}}>{u.email} · 🔑 {u.password}</div></div><button onClick={()=>delCU(u.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:4}}><Ic n="tr" sz={13}/></button></div>)}</div>}</Card>
@@ -247,6 +276,8 @@ export default function App(){
     {modal?.type==="edit_user"&&<Mod title="Editar Usuario" onClose={()=>setModal(null)}><FEditUser user={modal.user} table={modal.table} onDone={async upd=>{await dbUpd(modal.table,modal.user.id,upd);setModal(null)}} onX={()=>setModal(null)}/></Mod>}
     {modal?.type==="onboarding"&&<Mod title="Onboarding — Nuevo Cliente" onClose={()=>setModal(null)} w={640}><FOnboarding prospect={modal.prospect} onDone={(id,data)=>convertProspect(id,data)} onX={()=>setModal(null)}/></Mod>}
     {modal?.type==="dup_period"&&<Mod title="Duplicar periodo de tareas" onClose={()=>setModal(null)} w={560}><FDupPeriod todos={todos} clients={clients} prospects={prospects} onDuplicate={dupPeriod} onX={()=>setModal(null)}/></Mod>}
+    {modal?.type==="add_service"&&<Mod title="Agregar servicio" onClose={()=>setModal(null)} w={500}><FService clientId={modal.clientId} onDone={async sv=>{await dbAdd("client_services",sv);await logAct("Agregó servicio","service",sv.service_name);setModal(null)}} onX={()=>setModal(null)}/></Mod>}
+    {modal?.type==="edit_service"&&<Mod title="Editar servicio" onClose={()=>setModal(null)} w={500}><FService init={modal.service} clientId={modal.service.client_id} onDone={async sv=>{await dbUpd("client_services",modal.service.id,sv);setModal(null)}} onX={()=>setModal(null)} isEdit/></Mod>}
   </div>;
 }
 
@@ -379,6 +410,60 @@ function FDupPeriod({todos,clients,prospects,onDuplicate,onX}){
     <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
       <Btn onClick={onX} v="ghost">Cancelar</Btn>
       <Btn onClick={()=>{if(!preview.length){alert("Primero dale Previsualizar");return}onDuplicate(preview,parseInt(dayShift));onX()}} disabled={!preview.length}>📋 Duplicar {preview.length} tareas</Btn>
+    </div>
+  </div>;
+}
+
+// ─── SERVICE FORM (mensual / único / mixto) ───
+function FService({clientId,onDone,onX,init,isEdit}){
+  const TYPES=[{value:"mensual",label:"🔄 Mensual (recurrente)",desc:"Social media, mantenimiento, etc."},{value:"unico",label:"💎 Pago único",desc:"Branding, diseño de logo, etc."},{value:"mixto",label:"🔀 Mixto (único + mensual)",desc:"Website: pago de desarrollo + hosting mensual"}];
+  const STATUSES=[{value:"activo",label:"Activo"},{value:"pausado",label:"Pausado"},{value:"completado",label:"Completado"},{value:"cancelado",label:"Cancelado"}];
+  const[f,s]=useState(init?{
+    service_name:init.service_name||"",payment_type:init.payment_type||"mensual",
+    monthly_amount:init.monthly_amount||0,onetime_amount:init.onetime_amount||0,
+    onetime_paid:init.onetime_paid||false,currency:init.currency||"USD",
+    start_date:init.start_date||todayStr(),status:init.status||"activo",notes:init.notes||"",
+  }:{
+    service_name:"",payment_type:"mensual",monthly_amount:0,onetime_amount:0,
+    onetime_paid:false,currency:"USD",start_date:todayStr(),status:"activo",notes:"",
+  });
+
+  const selType=TYPES.find(t=>t.value===f.payment_type);
+
+  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    {/* Payment type selector */}
+    <div style={{display:"flex",gap:6,marginBottom:4}}>{TYPES.map(t=><button key={t.value} onClick={()=>s({...f,payment_type:t.value})} style={{flex:1,padding:"10px 8px",borderRadius:8,border:`1px solid ${f.payment_type===t.value?C.acc:C.b}`,background:f.payment_type===t.value?C.acc+"12":"transparent",cursor:"pointer",textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:f.payment_type===t.value?C.acc:C.tm,fontFamily:F}}>{t.label}</div><div style={{fontSize:9,color:C.td,marginTop:2}}>{t.desc}</div></button>)}</div>
+
+    <Inp label="Nombre del servicio" value={f.service_name} onChange={e=>s({...f,service_name:e.target.value})} placeholder="Ej: Manejo de redes sociales, Branding completo, Website..."/>
+
+    {/* Amounts based on type */}
+    {(f.payment_type==="mensual"||f.payment_type==="mixto")&&
+      <Inp label="Monto mensual ($)" type="number" value={f.monthly_amount} onChange={e=>s({...f,monthly_amount:e.target.value})} placeholder="500"/>}
+    {(f.payment_type==="unico"||f.payment_type==="mixto")&&
+      <div><Inp label="Monto único ($)" type="number" value={f.onetime_amount} onChange={e=>s({...f,onetime_amount:e.target.value})} placeholder="2000"/>
+      {isEdit&&f.onetime_amount>0&&<label style={{display:"flex",alignItems:"center",gap:6,marginTop:6,fontSize:11,color:C.tm,cursor:"pointer"}}><input type="checkbox" checked={f.onetime_paid} onChange={e=>s({...f,onetime_paid:e.target.checked})}/> Ya se cobró el pago único</label>}</div>}
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+      <Sel label="Moneda" value={f.currency} onChange={e=>s({...f,currency:e.target.value})} options={[{value:"USD",label:"USD"},{value:"CAD",label:"CAD"}]}/>
+      <Inp label="Inicio" type="date" value={f.start_date} onChange={e=>s({...f,start_date:e.target.value})}/>
+      <Sel label="Estado" value={f.status} onChange={e=>s({...f,status:e.target.value})} options={STATUSES}/>
+    </div>
+
+    <Inp label="Notas" value={f.notes} onChange={e=>s({...f,notes:e.target.value})} placeholder="Detalles adicionales..."/>
+
+    {/* Summary */}
+    <div style={{background:C.bg,borderRadius:8,padding:12,border:`1px solid ${C.b}`}}>
+      <div style={{fontSize:10,fontWeight:600,color:C.acc,marginBottom:4}}>Resumen:</div>
+      <div style={{fontSize:11,color:C.tm}}>
+        {f.payment_type==="mensual"&&`🔄 Cobro recurrente: $${f.monthly_amount||0}/mes en ${f.currency}`}
+        {f.payment_type==="unico"&&`💎 Pago único: $${f.onetime_amount||0} en ${f.currency}${f.onetime_paid?" (cobrado)":" (pendiente)"}`}
+        {f.payment_type==="mixto"&&`🔀 Único: $${f.onetime_amount||0}${f.onetime_paid?" ✅":""} + Mensual: $${f.monthly_amount||0}/mes en ${f.currency}`}
+      </div>
+    </div>
+
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+      <Btn onClick={onX} v="ghost">Cancelar</Btn>
+      <Btn onClick={()=>{if(!f.service_name){alert("Ponle nombre al servicio");return}onDone({...f,client_id:clientId,monthly_amount:parseFloat(f.monthly_amount)||0,onetime_amount:parseFloat(f.onetime_amount)||0})}} disabled={!f.service_name}>{isEdit?"Guardar":"Agregar"}</Btn>
     </div>
   </div>;
 }
