@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";
 import { supabase } from "./supabase.js";
 import DriveFiles from "./DriveFiles.jsx";
 import KPIDashboard from "./KPIDashboard.jsx";
@@ -7,6 +7,9 @@ import ContentCalendar from "./ContentCalendar.jsx";
 import Pipeline from "./Pipeline.jsx";
 import generateQBR from "./QBRReport.jsx";
 import Expenses from "./Expenses.jsx";
+
+// Error Boundary - catches ANY error and shows it instead of black screen
+class ErrorBoundary extends Component{constructor(p){super(p);this.state={err:null}}static getDerivedStateFromError(e){return{err:e}}render(){if(this.state.err)return React.createElement("div",{style:{fontFamily:"'Poppins',sans-serif",background:"#060B18",color:"#F0F0F4",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},React.createElement("div",{style:{textAlign:"center",maxWidth:500}},React.createElement("div",{style:{fontSize:48,marginBottom:16}},"⚠️"),React.createElement("h2",{style:{fontSize:20,marginBottom:8,color:"#F8BA10"}},"Wauya Platform - Error"),React.createElement("p",{style:{fontSize:13,color:"#8A94A8",marginBottom:16}},String(this.state.err.message||this.state.err)),React.createElement("button",{onClick:()=>{localStorage.clear();window.location.reload()},style:{background:"#F8BA10",color:"#060B18",border:"none",borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:700,cursor:"pointer"}},"Reiniciar plataforma")));return this.props.children}}
 
 const STATUS_OPTS=[{value:"briefing",label:"Briefing",color:"#6B7280",icon:"📋"},{value:"en_progreso",label:"En Progreso",color:"#F59E0B",icon:"⚡"},{value:"revision",label:"En Revisión",color:"#8B5CF6",icon:"🔍"},{value:"aprobado",label:"Aprobado",color:"#10B981",icon:"✅"},{value:"entregado",label:"Entregado",color:"#3B82F6",icon:"📦"}];
 const DEL_TYPES=[{value:"imagen",label:"Imagen",icon:"🖼️"},{value:"video",label:"Video",icon:"🎬"},{value:"manual_marca",label:"Manual de Marca",icon:"📖"},{value:"presentacion",label:"Presentación",icon:"📊"},{value:"documento",label:"Documento",icon:"📄"},{value:"otro",label:"Otro",icon:"📎"}];
@@ -44,7 +47,8 @@ function Timeline({tasks,employees}){const dated=tasks.filter(t=>t.start_date);i
 function SearchResults({q,prospects,clients,employees,todos,onSelect,onClose}){if(!q||q.length<2)return null;const lq=q.toLowerCase();const rp=prospects.filter(x=>(x.name+x.company+(x.email||"")).toLowerCase().includes(lq)).slice(0,3);const rc=clients.filter(x=>(x.name+x.company+(x.email||"")).toLowerCase().includes(lq)).slice(0,3);const re=employees.filter(x=>(x.name+(x.email||"")).toLowerCase().includes(lq)).slice(0,3);const rt=todos.filter(x=>(x.title+(x.description||"")).toLowerCase().includes(lq)).slice(0,4);const total=rp.length+rc.length+re.length+rt.length;if(!total)return<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.s,border:`1px solid ${C.b}`,borderRadius:10,padding:16,zIndex:100,marginTop:4,textAlign:"center"}}><span style={{fontSize:12,color:C.td}}>Sin resultados</span></div>;return<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.s,border:`1px solid ${C.b}`,borderRadius:10,zIndex:100,marginTop:4,maxHeight:400,overflow:"auto"}}>{rp.length>0&&<div style={{padding:"8px 14px",borderBottom:`1px solid ${C.b}`}}><div style={{fontSize:10,fontWeight:700,color:C.tm,marginBottom:6}}>🎯 PROSPECTOS</div>{rp.map(p=><div key={p.id} onClick={()=>{onSelect("prospects",p.id);onClose()}} style={{padding:"6px 8px",borderRadius:6,cursor:"pointer",fontSize:12,color:C.tx}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{p.company||p.name}</div>)}</div>}{rc.length>0&&<div style={{padding:"8px 14px",borderBottom:`1px solid ${C.b}`}}><div style={{fontSize:10,fontWeight:700,color:C.tm,marginBottom:6}}>💼 CLIENTES</div>{rc.map(c=><div key={c.id} onClick={()=>{onSelect("clients",c.id);onClose()}} style={{padding:"6px 8px",borderRadius:6,cursor:"pointer",fontSize:12,color:C.tx}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{c.company||c.name}</div>)}</div>}{rt.length>0&&<div style={{padding:"8px 14px"}}><div style={{fontSize:10,fontWeight:700,color:C.tm,marginBottom:6}}>📋 TAREAS</div>{rt.map(t=><div key={t.id} onClick={()=>{onSelect(t.client_id?"clients":"timeline",t.client_id);onClose()}} style={{padding:"6px 8px",borderRadius:6,cursor:"pointer",fontSize:12,color:C.tx}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{t.title}</div>)}</div>}</div>}
 
 // ═══ MAIN APP ═══
-export default function App(){
+export default function App(){return<ErrorBoundary><AppInner/></ErrorBoundary>}
+function AppInner(){
   const isMobile=useIsMobile();
   const[loading,setLoading]=useState(true);const[user,setUser]=useState(null);const[view,setView]=useState("dashboard");
   const[prospects,setProspects]=useState([]);const[clients,setClients]=useState([]);const[employees,setEmployees]=useState([]);
@@ -70,7 +74,7 @@ export default function App(){
     setTemplates(await safeQuery("task_templates",{order:"name",asc:true}));
     setAL(await safeQuery("activity_log",{order:"created_at",limit:50}));
   },[]);
-  useEffect(()=>{const sess=localStorage.getItem("wauya_user");if(sess)try{setUser(JSON.parse(sess))}catch{}loadAll().finally(()=>setLoading(false))},[loadAll]);
+  useEffect(()=>{try{const sess=localStorage.getItem("wauya_user");if(sess){const parsed=JSON.parse(sess);if(parsed&&parsed.role)setUser(parsed);else localStorage.removeItem("wauya_user")}}catch{localStorage.removeItem("wauya_user")}loadAll().catch(()=>{}).finally(()=>setLoading(false))},[loadAll]);
 
   // Activity logger
   const logAct=async(action,entityType,entityName)=>{try{await supabase.from("activity_log").insert({action,entity_type:entityType,entity_name:entityName,user_name:user?.name||"Admin"})}catch{}};
