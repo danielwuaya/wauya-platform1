@@ -168,7 +168,174 @@ function AppInner(){
   if(user?.role==="employee"){const myTodos=todos.filter(td=>td.assigned_to===user.id||td.assigned_to_2===user.id);const myHours=timeEntries.filter(t=>t.employee_id===user.id);const todayHours=myHours.filter(t=>t.date===todayStr()).reduce((s,t)=>s+(parseFloat(t.hours)||0),0);const byCategory={cliente:[],propuesta:[],interno:[]};myTodos.forEach(td=>{const cat=td.category||"cliente";if(!byCategory[cat])byCategory[cat]=[];byCategory[cat].push(td)});return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh"}}><style>{CSS}</style><div style={{borderBottom:`1px solid ${C.b}`,padding:isMobile?"10px 16px":"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontFamily:D,fontSize:22,fontWeight:800,color:C.tx}}>W<span style={{color:C.acc}}>.</span></span><span style={{color:C.td}}>|</span><span style={{fontSize:13,color:C.tm}}>Portal Empleado</span></div><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontSize:12,color:C.tm}}>{user.name}</span><Btn onClick={logout} v="ghost" icon="out" sz="sm">Salir</Btn></div></div><div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"20px 16px":"32px 20px",animation:"fadeUp .4s ease"}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx,marginBottom:6}}>Hola, {user.name} 👋</h1><p style={{fontSize:13,color:C.tm,marginBottom:20}}>{myTodos.filter(td=>td.status!=="completado").length} pendientes · ⏱ {todayHours.toFixed(1)}h hoy</p>{/* Quick time entry */}<Card style={{marginBottom:20,background:C.s2}}><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><Ic n="clock" sz={16}/><span style={{fontSize:12,fontWeight:600,color:C.tx}}>Registrar horas</span><select id="emp-task-sel" style={{flex:1,minWidth:120,background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:11,fontFamily:F,outline:"none"}}><option value="">— Tarea —</option>{myTodos.filter(t=>t.status!=="completado").map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select><input id="emp-hours" type="number" step="0.5" min="0.5" max="12" placeholder="Hrs" style={{width:60,background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/><Btn onClick={async()=>{const tid=document.getElementById("emp-task-sel").value;const hrs=parseFloat(document.getElementById("emp-hours").value);if(!hrs||hrs<=0)return;const task=tid?myTodos.find(t=>t.id===tid):null;await addTimeEntry({employee_id:user.id,todo_id:tid||null,client_id:task?.client_id||null,hours:hrs,date:todayStr(),description:task?.title||"Trabajo general"});document.getElementById("emp-hours").value=""}} sz="sm">Registrar</Btn></div></Card>{myTodos.length===0?<Empty icon="✅" title="Sin tareas"/>:CATS.map(cat=>{const catTodos=byCategory[cat.value]||[];if(!catTodos.length)return null;return<Card key={cat.value} style={{marginBottom:16}}><h3 style={{fontFamily:D,fontSize:14,fontWeight:700,color:cat.color,marginBottom:14}}>{cat.icon} {cat.label}s ({catTodos.length})</h3><div style={{display:"flex",flexDirection:"column",gap:6}}>{catTodos.map(td=>{const pr=PRIOS.find(p=>p.value===td.priority);const st=TSTAT.find(s=>s.value===td.status);const projName=td.client_id?clients.find(x=>x.id===td.client_id)?.company:td.prospect_id?prospects.find(x=>x.id===td.prospect_id)?.company:"";const tdHrs=timeEntries.filter(t=>t.todo_id===td.id).reduce((s,t)=>s+(parseFloat(t.hours)||0),0);return<div key={td.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:C.bg,borderRadius:10,border:`1px solid ${C.b}`,flexWrap:"wrap"}}><button onClick={async()=>{const nx=td.status==="pendiente"?"en_progreso":td.status==="en_progreso"?"completado":"pendiente";await updTodo(td.id,{status:nx})}} style={{width:22,height:22,borderRadius:6,border:`2px solid ${st?.color}`,background:td.status==="completado"?C.g:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"#fff"}}>{td.status==="completado"&&<Ic n="check" sz={12}/>}</button><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:500,color:td.status==="completado"?C.td:C.tx,textDecoration:td.status==="completado"?"line-through":"none"}}>{td.title}</div><div style={{fontSize:10,color:C.td,display:"flex",gap:8,marginTop:2,flexWrap:"wrap"}}>{projName&&<span style={{color:cat.color}}>{projName}</span>}{td.end_date&&<span>📅 {td.end_date}</span>}{tdHrs>0&&<span style={{color:C.w}}>⏱ {tdHrs.toFixed(1)}h</span>}{td.url&&<a href={td.url} target="_blank" rel="noopener noreferrer" style={{color:C.bl,textDecoration:"none"}}>🔗</a>}</div></div>{pr&&<Badge label={pr.label} color={pr.color}/>}</div>})}</div></Card>})}</div></div>}
 
   // CLIENT PORTAL
-  if(user?.role==="client"){const cl=clients.find(x=>x.id===user.client_id);if(!cl)return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div style={{textAlign:"center"}}><div style={{fontSize:48,marginBottom:16}}>🔒</div><h2 style={{fontFamily:D,color:C.tx}}>Sin acceso</h2><Btn onClick={logout} style={{marginTop:16}}>Salir</Btn></div></div>;return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh"}}><style>{CSS}</style><div style={{borderBottom:`1px solid ${C.b}`,padding:isMobile?"10px 16px":"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontFamily:D,fontSize:22,fontWeight:800,color:C.tx}}>W<span style={{color:C.acc}}>.</span></span><span style={{color:C.td}}>|</span><span style={{fontSize:13,color:C.tm}}>Portal Cliente</span></div><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontSize:12,color:C.tm}}>{user.name}</span><Btn onClick={logout} v="ghost" icon="out" sz="sm">Salir</Btn></div></div><div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"20px 16px":"36px 20px",animation:"fadeUp .4s ease"}}><h1 style={{fontFamily:D,fontSize:isMobile?22:26,fontWeight:700,color:C.tx,marginBottom:6}}>Hola, {user.name} 👋</h1><p style={{fontSize:13,color:C.tm,marginBottom:28}}>Portal de {cl.company||cl.name}</p><Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx}}>Estado</h3><SBadge status={cl.status}/></div><div style={{display:"flex",gap:3,borderRadius:6,overflow:"hidden"}}>{STATUS_OPTS.map((s,i)=><div key={s.value} style={{flex:1,height:5,background:i<=STATUS_OPTS.findIndex(x=>x.value===cl.status)?s.color:C.b}}/>)}</div></Card><Card style={{marginBottom:20}}><Approvals clientId={cl.id} readOnly/></Card>{cl.sheet_id&&<Card style={{marginBottom:20}}><KPIDashboard sheetId={cl.sheet_id} readOnly/></Card>}{cl.calendar_sheet_id&&<Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:14}}>📅 Calendario</h3><ContentCalendar sheetId={cl.calendar_sheet_id} readOnly/></Card>}<Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:16}}>Entregables ({clientFiles(cl.id).length})</h3>{clientFiles(cl.id).length===0?<Empty icon="📦" title="Sin entregables"/>:<div style={{display:"flex",flexDirection:"column",gap:8}}>{clientFiles(cl.id).map(fl=><FileCard key={fl.id} file={fl} showDel={false}/>)}</div>}</Card>{cl.drive_folder_id&&<Card><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:14}}>📂 Archivos</h3><DriveFiles ownerType="client" ownerId={cl.id} currentFolderId={cl.drive_folder_id} readOnly/></Card>}</div></div>}
+  // CLIENT PORTAL — New version with onboarding, credentials, approvals
+  if(user?.role==="client"){
+    const cl=clients.find(x=>x.id===user.client_id);
+    if(!cl)return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div style={{textAlign:"center"}}><div style={{fontSize:48,marginBottom:16}}>🔒</div><h2 style={{fontFamily:D,color:C.tx}}>Sin acceso</h2><Btn onClick={logout} style={{marginTop:16}}>Salir</Btn></div></div>;
+
+    const cu=clientUsers.find(u=>u.id===user.id);
+    const onboardingDone=cu?.onboarding_done;
+    const[obStep,setObStep]=useState(onboardingDone?0:1);
+    const[creds,setCreds]=useState([]);
+    const[credForm,setCredForm]=useState({platform:"instagram",username:"",password:"",url:"",notes:""});
+    const[showPw,setShowPw]=useState({});
+    const[calComment,setCalComment]=useState("");
+    const[brandComment,setBrandComment]=useState("");
+
+    // Load credentials
+    useEffect(()=>{if(cl.id){supabase.from("client_credentials").select("*").eq("client_id",cl.id).order("created_at").then(({data})=>{if(data)setCreds(data)})}},[cl.id]);
+
+    const saveCred=async()=>{if(!credForm.username&&!credForm.password)return;await supabase.from("client_credentials").insert({client_id:cl.id,...credForm}).select().single();const{data}=await supabase.from("client_credentials").select("*").eq("client_id",cl.id).order("created_at");if(data)setCreds(data);setCredForm({platform:"instagram",username:"",password:"",url:"",notes:""});showToast("Credencial guardada")};
+    const delCred=async id=>{await supabase.from("client_credentials").delete().eq("id",id);setCreds(creds.filter(c=>c.id!==id));showToast("Credencial eliminada")};
+    const finishOnboarding=async()=>{if(cu)await supabase.from("client_users").update({onboarding_done:true}).eq("id",cu.id);setObStep(0)};
+
+    const PLATFORMS=[{value:"instagram",label:"Instagram",icon:"📸"},{value:"facebook",label:"Facebook",icon:"📘"},{value:"tiktok",label:"TikTok",icon:"🎵"},{value:"linkedin",label:"LinkedIn",icon:"💼"},{value:"twitter",label:"Twitter/X",icon:"🐦"},{value:"youtube",label:"YouTube",icon:"▶️"},{value:"google_business",label:"Google Business",icon:"📍"},{value:"website",label:"Website (admin)",icon:"🌐"},{value:"email_marketing",label:"Email marketing",icon:"📧"},{value:"hosting",label:"Hosting/Dominio",icon:"🖥️"},{value:"otro",label:"Otro",icon:"🔑"}];
+
+    // ONBOARDING WIZARD (first time only)
+    if(obStep>0)return<div style={{fontFamily:F,background:`radial-gradient(ellipse at 50% 0%,${C.s2},${C.bg})`,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><style>{CSS}</style>{toast&&<Toast message={toast.msg} type={toast.type}/>}<div style={{width:"100%",maxWidth:560,animation:"fadeUp .5s ease"}}>
+      <div style={{textAlign:"center",marginBottom:28}}><div style={{fontFamily:D,fontSize:36,fontWeight:800,color:C.tx}}>W<span style={{color:C.acc}}>.</span></div><div style={{fontSize:11,color:C.td,letterSpacing:".12em",textTransform:"uppercase"}}>Bienvenido a Wauya Platform</div></div>
+      {/* Progress */}
+      <div style={{display:"flex",gap:4,marginBottom:20}}>{[1,2,3].map(s=><div key={s} style={{flex:1,height:4,borderRadius:2,background:obStep>=s?C.acc:C.b,transition:"all .3s"}}/>)}</div>
+      <Card>
+        {obStep===1&&<div>
+          <h2 style={{fontFamily:D,fontSize:20,fontWeight:700,color:C.tx,marginBottom:12}}>👋 Hola, {user.name}</h2>
+          <p style={{fontSize:13,color:C.tm,lineHeight:1.8,marginBottom:16}}>Bienvenido al portal de <strong style={{color:C.acc}}>{cl.company||cl.name}</strong>. Aquí podrás:</p>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+            {[
+              {icon:"🎨",title:"Aprobar la línea gráfica",desc:"Revisas la propuesta visual y la apruebas o pides cambios"},
+              {icon:"📅",title:"Aprobar el calendario de contenido",desc:"Cada mes revisas el plan de contenido antes de que se publique"},
+              {icon:"📊",title:"Ver métricas y KPIs",desc:"Monitorea el rendimiento de tus redes en tiempo real"},
+              {icon:"📦",title:"Descargar entregables",desc:"Todos los archivos que creamos para ti, en un solo lugar"},
+              {icon:"🔑",title:"Guardar tus credenciales",desc:"Tus accesos a redes sociales, seguros y organizados"},
+            ].map((item,i)=><div key={i} style={{display:"flex",gap:10,padding:"10px 12px",background:C.bg,borderRadius:10,border:`1px solid ${C.b}`}}>
+              <span style={{fontSize:20,flexShrink:0}}>{item.icon}</span>
+              <div><div style={{fontSize:13,fontWeight:600,color:C.tx}}>{item.title}</div><div style={{fontSize:11,color:C.td,marginTop:2}}>{item.desc}</div></div>
+            </div>)}
+          </div>
+          <Btn onClick={()=>setObStep(2)} sz="lg" style={{width:"100%",justifyContent:"center"}}>Continuar →</Btn>
+        </div>}
+
+        {obStep===2&&<div>
+          <h2 style={{fontFamily:D,fontSize:20,fontWeight:700,color:C.tx,marginBottom:6}}>🔑 Tus credenciales</h2>
+          <p style={{fontSize:12,color:C.tm,marginBottom:16,lineHeight:1.6}}>Para manejar tus redes necesitamos acceso. Ingresa las credenciales de las plataformas que usas. Puedes agregar más después.</p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <Sel label="Plataforma" value={credForm.platform} onChange={e=>setCredForm({...credForm,platform:e.target.value})} options={PLATFORMS}/>
+            <Inp label="Usuario / Email" value={credForm.username} onChange={e=>setCredForm({...credForm,username:e.target.value})} placeholder="@usuario o email"/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <Inp label="Contraseña" type="password" value={credForm.password} onChange={e=>setCredForm({...credForm,password:e.target.value})} placeholder="••••••"/>
+            <Inp label="URL (opcional)" value={credForm.url} onChange={e=>setCredForm({...credForm,url:e.target.value})} placeholder="https://..."/>
+          </div>
+          <Btn onClick={saveCred} v="secondary" sz="sm" style={{marginBottom:14}}>+ Agregar credencial</Btn>
+          {creds.length>0&&<div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:14}}>{creds.map(cr=>{const pl=PLATFORMS.find(p=>p.value===cr.platform)||PLATFORMS[10];return<div key={cr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><span style={{fontSize:14}}>{pl.icon}</span><div style={{flex:1}}><span style={{fontSize:12,fontWeight:500,color:C.tx}}>{pl.label}</span><span style={{fontSize:10,color:C.td,marginLeft:6}}>{cr.username}</span></div><span style={{fontSize:10,color:C.g}}>✓ Guardado</span></div>})}</div>}
+          <div style={{display:"flex",gap:8}}><Btn onClick={()=>setObStep(1)} v="ghost">← Atrás</Btn><Btn onClick={()=>setObStep(3)} sz="lg" style={{flex:1,justifyContent:"center"}}>{creds.length>0?"Continuar →":"Omitir por ahora →"}</Btn></div>
+        </div>}
+
+        {obStep===3&&<div>
+          <h2 style={{fontFamily:D,fontSize:20,fontWeight:700,color:C.tx,marginBottom:6}}>✅ ¡Todo listo!</h2>
+          <p style={{fontSize:13,color:C.tm,marginBottom:16,lineHeight:1.6}}>Tu portal está configurado. Ahora puedes ver el estado de tu proyecto, aprobar contenido, y acceder a tus archivos.</p>
+          <div style={{background:C.bg,borderRadius:10,padding:14,border:`1px solid ${C.b}`,marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.acc,marginBottom:6}}>Resumen:</div>
+            <div style={{fontSize:12,color:C.tm,lineHeight:1.8}}>
+              <div>👤 Cliente: <strong style={{color:C.tx}}>{cl.company||cl.name}</strong></div>
+              <div>🔑 Credenciales guardadas: <strong style={{color:C.tx}}>{creds.length}</strong></div>
+              <div>🎯 Servicios: <strong style={{color:C.tx}}>{cl.services||"En definición"}</strong></div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}><Btn onClick={()=>setObStep(2)} v="ghost">← Atrás</Btn><Btn onClick={finishOnboarding} sz="lg" style={{flex:1,justifyContent:"center"}}>Entrar al portal 🚀</Btn></div>
+        </div>}
+      </Card>
+    </div></div>;
+
+    // MAIN CLIENT PORTAL
+    return<div style={{fontFamily:F,background:C.bg,minHeight:"100vh"}}><style>{CSS}</style>{toast&&<Toast message={toast.msg} type={toast.type}/>}
+      <div style={{borderBottom:`1px solid ${C.b}`,padding:isMobile?"10px 16px":"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontFamily:D,fontSize:22,fontWeight:800,color:C.tx}}>W<span style={{color:C.acc}}>.</span></span><span style={{color:C.td}}>|</span><span style={{fontSize:13,color:C.tm}}>Portal Cliente</span></div><div style={{display:"flex",alignItems:"center",gap:14}}><span style={{fontSize:12,color:C.tm}}>{user.name}</span><Btn onClick={logout} v="ghost" icon="out" sz="sm">Salir</Btn></div></div>
+      <div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"20px 16px":"36px 20px",animation:"fadeUp .4s ease"}}>
+        <h1 style={{fontFamily:D,fontSize:isMobile?22:26,fontWeight:700,color:C.tx,marginBottom:6}}>Hola, {user.name} 👋</h1>
+        <p style={{fontSize:13,color:C.tm,marginBottom:28}}>Portal de {cl.company||cl.name}</p>
+
+        {/* STATUS BAR */}
+        <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx}}>Estado del proyecto</h3><SBadge status={cl.status}/></div><div style={{display:"flex",gap:3,borderRadius:6,overflow:"hidden"}}>{STATUS_OPTS.map((s,i)=><div key={s.value} style={{flex:1,textAlign:"center"}}><div style={{height:5,background:i<=STATUS_OPTS.findIndex(x=>x.value===cl.status)?s.color:C.b,marginBottom:4}}/><div style={{fontSize:8,color:i<=STATUS_OPTS.findIndex(x=>x.value===cl.status)?s.color:C.td}}>{s.icon}</div></div>)}</div></Card>
+
+        {/* BRAND APPROVAL */}
+        <Card style={{marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx}}>🎨 Línea gráfica</h3>
+            {cl.brand_status==="aprobado"?<Badge label="✅ Aprobada" color={C.g}/>:cl.brand_status==="cambios"?<Badge label="✏️ Cambios enviados" color={C.w}/>:<Badge label="⏳ Pendiente" color={C.tm}/>}
+          </div>
+          {cl.brand_status==="pendiente"&&<p style={{fontSize:12,color:C.td,lineHeight:1.6}}>Tu equipo de Wuaya está preparando la propuesta de línea gráfica. Una vez lista, podrás revisarla y aprobarla aquí.</p>}
+          {cl.brand_status==="en_revision"&&<div>
+            <p style={{fontSize:12,color:C.tm,marginBottom:12,lineHeight:1.6}}>La propuesta de línea gráfica está lista para tu revisión. Revisa los colores, tipografía y estilo visual propuesto.</p>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              <Btn onClick={async()=>{await supabase.from("clients").update({brand_status:"aprobado",brand_approved_at:new Date().toISOString()}).eq("id",cl.id);await loadAll();showToast("Línea gráfica aprobada")}} sz="lg" style={{flex:1,justifyContent:"center"}}>✅ Aprobar línea gráfica</Btn>
+            </div>
+            <Txt value={brandComment} onChange={e=>setBrandComment(e.target.value)} placeholder="¿Quieres pedir algún cambio? Escríbelo aquí..."/>
+            {brandComment&&<Btn onClick={async()=>{await supabase.from("clients").update({brand_status:"cambios",brand_comment:brandComment}).eq("id",cl.id);setBrandComment("");await loadAll();showToast("Comentario enviado")}} v="secondary" style={{marginTop:8}}>Enviar cambios</Btn>}
+          </div>}
+          {cl.brand_status==="aprobado"&&<p style={{fontSize:12,color:C.g}}>✅ Línea gráfica aprobada el {cl.brand_approved_at?new Date(cl.brand_approved_at).toLocaleDateString("es"):""}</p>}
+          {cl.brand_status==="cambios"&&<div><p style={{fontSize:12,color:C.w,marginBottom:4}}>✏️ Cambios solicitados:</p><p style={{fontSize:12,color:C.tm,background:C.bg,padding:10,borderRadius:8,border:`1px solid ${C.b}`}}>{cl.brand_comment}</p></div>}
+        </Card>
+
+        {/* CALENDAR APPROVAL */}
+        {cl.calendar_sheet_id&&<Card style={{marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx}}>📅 Calendario de contenido</h3>
+            {cl.calendar_status==="aprobado"?<Badge label="✅ Aprobado" color={C.g}/>:cl.calendar_status==="cambios"?<Badge label="✏️ Cambios enviados" color={C.w}/>:<Badge label="⏳ Pendiente" color={C.tm}/>}
+          </div>
+          <ContentCalendar sheetId={cl.calendar_sheet_id} readOnly/>
+          {cl.calendar_status!=="aprobado"&&<div style={{marginTop:14,borderTop:`1px solid ${C.b}`,paddingTop:14}}>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              <Btn onClick={async()=>{await supabase.from("clients").update({calendar_status:"aprobado",calendar_approved_at:new Date().toISOString()}).eq("id",cl.id);await loadAll();showToast("Calendario aprobado")}} sz="lg" style={{flex:1,justifyContent:"center"}}>✅ Aprobar calendario del mes</Btn>
+            </div>
+            <Txt value={calComment} onChange={e=>setCalComment(e.target.value)} placeholder="¿Quieres cambiar algo del calendario? Escríbelo aquí..."/>
+            {calComment&&<Btn onClick={async()=>{await supabase.from("clients").update({calendar_status:"cambios",calendar_comment:calComment}).eq("id",cl.id);setCalComment("");await loadAll();showToast("Comentario enviado")}} v="secondary" style={{marginTop:8}}>Enviar cambios</Btn>}
+          </div>}
+          {cl.calendar_status==="aprobado"&&<p style={{fontSize:12,color:C.g,marginTop:10}}>✅ Calendario aprobado el {cl.calendar_approved_at?new Date(cl.calendar_approved_at).toLocaleDateString("es"):""}</p>}
+        </Card>}
+
+        {/* KPIs */}
+        {cl.sheet_id&&<Card style={{marginBottom:20}}><KPIDashboard sheetId={cl.sheet_id} readOnly/></Card>}
+
+        {/* CREDENTIALS VAULT */}
+        <Card style={{marginBottom:20}}>
+          <h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:14}}>🔑 Mis credenciales</h3>
+          <p style={{fontSize:11,color:C.td,marginBottom:12,lineHeight:1.5}}>Tus accesos a redes sociales y herramientas. Solo tú y tu equipo de Wuaya pueden verlos.</p>
+          {creds.length>0&&<div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>{creds.map(cr=>{const pl=PLATFORMS.find(p=>p.value===cr.platform)||PLATFORMS[10];return<div key={cr.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:C.bg,borderRadius:10,border:`1px solid ${C.b}`}}>
+            <span style={{fontSize:18,flexShrink:0}}>{pl.icon}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{pl.label}</div>
+              <div style={{fontSize:11,color:C.td}}>👤 {cr.username}{cr.url?` · 🔗 ${cr.url}`:""}</div>
+            </div>
+            <div style={{display:"flex",gap:4,alignItems:"center"}}>
+              <button onClick={()=>setShowPw({...showPw,[cr.id]:!showPw[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPw[cr.id]?cr.password:"••••••"}</button>
+              <button onClick={()=>delCred(cr.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:3}}><Ic n="tr" sz={13}/></button>
+            </div>
+          </div>})}</div>}
+          <div style={{background:C.bg,borderRadius:10,padding:14,border:`1px solid ${C.b}`}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.acc,marginBottom:8}}>+ Agregar credencial</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <Sel value={credForm.platform} onChange={e=>setCredForm({...credForm,platform:e.target.value})} options={PLATFORMS}/>
+              <Inp value={credForm.username} onChange={e=>setCredForm({...credForm,username:e.target.value})} placeholder="Usuario / email"/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <Inp type="password" value={credForm.password} onChange={e=>setCredForm({...credForm,password:e.target.value})} placeholder="Contraseña"/>
+              <Inp value={credForm.url} onChange={e=>setCredForm({...credForm,url:e.target.value})} placeholder="URL (opcional)"/>
+            </div>
+            <Btn onClick={saveCred} v="secondary" sz="sm">Guardar credencial</Btn>
+          </div>
+        </Card>
+
+        {/* DELIVERABLES */}
+        <Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:16}}>📦 Entregables ({clientFiles(cl.id).length})</h3>{clientFiles(cl.id).length===0?<Empty icon="📦" title="Sin entregables" sub="Cuando tu equipo suba archivos, aparecerán aquí"/>:<div style={{display:"flex",flexDirection:"column",gap:8}}>{clientFiles(cl.id).map(fl=><FileCard key={fl.id} file={fl} showDel={false}/>)}</div>}</Card>
+
+        {/* DRIVE */}
+        {cl.drive_folder_id&&<Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:15,fontWeight:600,color:C.tx,marginBottom:14}}>📂 Archivos</h3><DriveFiles ownerType="client" ownerId={cl.id} currentFolderId={cl.drive_folder_id} readOnly/></Card>}
+
+        {/* FOOTER */}
+        <div style={{textAlign:"center",padding:"20px 0",fontSize:8,color:C.td}}>© {new Date().getFullYear()} Wuaya Marketing & Communications. Todos los derechos reservados.</div>
+      </div>
+    </div>;
+  }
 
   // ═══ ADMIN ═══
   const nav=[{key:"dashboard",label:"Dashboard",icon:"dash"},{key:"pipeline",label:"Pipeline",icon:"pipe",cnt:prospects.length},{key:"prospects",label:"Prospectos",icon:"prosp"},{key:"clients",label:"Clientes",icon:"cli",cnt:clients.length},{key:"employees",label:"Empleados",icon:"emp",cnt:employees.length},{key:"timeline",label:"Cronograma",icon:"cal",cnt:todos.filter(t=>t.status!=="completado").length},{key:"gastos",label:"Gastos",icon:"dollar"},{key:"users",label:"Usuarios",icon:"usr"},{key:"settings",label:"Configuración",icon:"lock"}];
@@ -242,7 +409,14 @@ function AppInner(){
         </div>
         {/* BILLING */}
         <Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:10}}><Ic n="dollar" sz={14}/> Facturación</h3><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}><div><label style={{fontSize:10,color:C.tm}}>Fee mensual ($)</label><input type="number" value={sc.monthly_fee||0} onChange={e=>{const v=e.target.value;setClients(cl=>cl.map(x=>x.id===sc.id?{...x,monthly_fee:v}:x));autoSave("clients",sc.id,{monthly_fee:parseFloat(v)||0})}} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",marginTop:4}}/></div><div><label style={{fontSize:10,color:C.tm}}>Día de cobro</label><input type="number" min="1" max="31" value={sc.billing_day||1} onChange={e=>{const v=e.target.value;setClients(cl=>cl.map(x=>x.id===sc.id?{...x,billing_day:v}:x));autoSave("clients",sc.id,{billing_day:parseInt(v)||1})}} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",marginTop:4}}/></div><div><label style={{fontSize:10,color:C.tm}}>Estado</label><select value={sc.billing_status||"activo"} onChange={e=>{updClient(sc.id,{billing_status:e.target.value});showToast("Estado de cobro actualizado")}} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:12,fontFamily:F,outline:"none",marginTop:4}}>{BILL_STATUS.map(b=><option key={b.value} value={b.value}>{b.label}</option>)}</select></div></div></Card>
-        <Card style={{marginBottom:20}}><Approvals clientId={sc.id}/></Card>
+        {/* BRAND APPROVAL CONTROL */}
+        <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>🎨 Línea gráfica</h3><div style={{display:"flex",gap:6}}>{["pendiente","en_revision","aprobado"].map(st=><button key={st} onClick={()=>{updClient(sc.id,{brand_status:st});showToast("Estado actualizado")}} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${sc.brand_status===st?C.acc:C.b}`,background:sc.brand_status===st?C.acc+"15":"transparent",color:sc.brand_status===st?C.acc:C.td,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:F}}>{st==="pendiente"?"⏳ Pendiente":st==="en_revision"?"👁️ En revisión":"✅ Aprobada"}</button>)}</div></div>{sc.brand_status==="cambios"&&<div style={{background:C.bg,borderRadius:8,padding:10,border:`1px solid ${C.w}30`}}><div style={{fontSize:10,fontWeight:600,color:C.w,marginBottom:4}}>Cliente pidió cambios:</div><div style={{fontSize:12,color:C.tm}}>{sc.brand_comment||"Sin comentario"}</div></div>}</Card>
+
+        {/* CALENDAR APPROVAL CONTROL */}
+        <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>📅 Aprobación calendario</h3><div style={{display:"flex",gap:6}}>{["pendiente","aprobado"].map(st=><button key={st} onClick={()=>{updClient(sc.id,{calendar_status:st});showToast("Estado actualizado")}} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${sc.calendar_status===st?C.acc:C.b}`,background:sc.calendar_status===st?C.acc+"15":"transparent",color:sc.calendar_status===st?C.acc:C.td,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:F}}>{st==="pendiente"?"⏳ Pendiente":"✅ Aprobado"}</button>)}</div></div>{sc.calendar_status==="cambios"&&<div style={{background:C.bg,borderRadius:8,padding:10,border:`1px solid ${C.w}30`}}><div style={{fontSize:10,fontWeight:600,color:C.w,marginBottom:4}}>Cliente pidió cambios:</div><div style={{fontSize:12,color:C.tm}}>{sc.calendar_comment||"Sin comentario"}</div></div>}</Card>
+
+        {/* CLIENT CREDENTIALS (admin view) */}
+        <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>🔑 Credenciales del cliente</h3></div><ClientCreds clientId={sc.id}/></Card>
         <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>Usuarios ({clientUsers.filter(u=>u.client_id===sc.id).length})</h3><Btn onClick={()=>setModal("add_cu")} v="secondary" sz="sm" icon="plus">Crear</Btn></div>{clientUsers.filter(u=>u.client_id===sc.id).length===0?<p style={{fontSize:11,color:C.td}}>Sin usuarios</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientUsers.filter(u=>u.client_id===sc.id).map(u=><div key={u.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><div><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{u.name}</div><div style={{fontSize:10,color:C.td}}>{u.email} · 🔑 {u.password}</div></div><button onClick={()=>delCU(u.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:4}}><Ic n="tr" sz={13}/></button></div>)}</div>}</Card>
         <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>Tareas ({todos.filter(td=>td.client_id===sc.id).length})</h3><Btn onClick={()=>setModal({type:"add_todo_global",defaults:{category:"cliente",client_id:sc.id}})} v="secondary" sz="sm" icon="plus">Nueva</Btn></div>{todos.filter(td=>td.client_id===sc.id).length===0?<p style={{fontSize:11,color:C.td}}>Sin tareas</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{todos.filter(td=>td.client_id===sc.id).map(td=><TaskRow key={td.id} td={td} employees={employees} clients={clients} prospects={prospects} onStatusChange={(id,u)=>updTodo(id,u)} onEdit={t=>setModal({type:"edit_todo",todo:t})} onDelete={delTodo} onLogTime={t=>setModal({type:"log_time",task:t})} onDuplicate={t=>dupTodo(t)}/>)}</div>}</Card>
         <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>Entregables ({clientFiles(sc.id).length})</h3><Btn onClick={()=>setModal("upload_del")} v="secondary" sz="sm" icon="plus">Subir</Btn></div>{clientFiles(sc.id).length===0?<Empty icon="📦" title="Sin entregables"/>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientFiles(sc.id).map(fl=><FileCard key={fl.id} file={fl} onDelete={deleteFile}/>)}</div>}</Card>
@@ -421,3 +595,12 @@ function FDupPeriod({todos,clients,prospects,onDuplicate,onX}){
 
 // ─── SERVICE FORM (mensual / único / mixto) ───
 
+
+// ─── CLIENT CREDENTIALS VIEWER (admin) ───
+function ClientCreds({clientId}){
+  const[creds,setCreds]=useState([]);const[showPw,setShowPw]=useState({});
+  const PLATS=[{value:"instagram",icon:"📸"},{value:"facebook",icon:"📘"},{value:"tiktok",icon:"🎵"},{value:"linkedin",icon:"💼"},{value:"twitter",icon:"🐦"},{value:"youtube",icon:"▶️"},{value:"google_business",icon:"📍"},{value:"website",icon:"🌐"},{value:"email_marketing",icon:"📧"},{value:"hosting",icon:"🖥️"},{value:"otro",icon:"🔑"}];
+  useEffect(()=>{if(clientId)supabase.from("client_credentials").select("*").eq("client_id",clientId).order("created_at").then(({data})=>{if(data)setCreds(data)})},[clientId]);
+  if(!creds.length)return<p style={{fontSize:11,color:C.td}}>El cliente aún no ha ingresado sus credenciales.</p>;
+  return<div style={{display:"flex",flexDirection:"column",gap:6}}>{creds.map(cr=>{const pl=PLATS.find(p=>p.value===cr.platform)||{icon:"🔑"};return<div key={cr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><span style={{fontSize:14}}>{pl.icon}</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{cr.platform} {cr.username?`— ${cr.username}`:""}</div>{cr.url&&<div style={{fontSize:10,color:C.bl}}>🔗 {cr.url}</div>}</div><button onClick={()=>setShowPw({...showPw,[cr.id]:!showPw[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPw[cr.id]?cr.password:"🔒 Ver"}</button><button onClick={()=>{navigator.clipboard.writeText(cr.password||"");}} style={{background:"none",border:"none",cursor:"pointer",color:C.tm,padding:3,fontSize:10}}>📋</button></div>})}</div>;
+}
