@@ -73,6 +73,10 @@ function AppInner(){
   const[notifOpen,setNO]=useState(false);const[approvals,setApprovals]=useState([]);
   // LOT 2 STATE
   const[timeEntries,setTE]=useState([]);const[templates,setTemplates]=useState([]);const[activityLog,setAL]=useState([]);
+  // Client portal state (must be top-level for hooks rules)
+  const[obStep,setObStep]=useState(0);const[creds,setCreds]=useState([]);
+  const[credForm,setCredForm]=useState({platform:"instagram",username:"",password:"",url:"",notes:""});
+  const[showPwMap,setShowPwMap]=useState({});const[calComment,setCalComment]=useState("");const[brandComment,setBrandComment]=useState("");
 
   const safeQuery=async(table,opts={})=>{try{let q=supabase.from(table).select("*");if(opts.order)q=q.order(opts.order,{ascending:opts.asc??false});if(opts.limit)q=q.limit(opts.limit);const{data}=await q;return data||[]}catch{return[]}};
   const loadAll=useCallback(async()=>{
@@ -88,6 +92,12 @@ function AppInner(){
     setAL(await safeQuery("activity_log",{order:"created_at",limit:50}));
   },[]);
   useEffect(()=>{try{const sess=localStorage.getItem("wauya_user");if(sess){const parsed=JSON.parse(sess);if(parsed&&parsed.role)setUser(parsed);else localStorage.removeItem("wauya_user")}}catch{localStorage.removeItem("wauya_user")}loadAll().catch(()=>{}).finally(()=>setLoading(false))},[loadAll]);
+
+  // Client portal: load credentials when client user logs in
+  useEffect(()=>{if(user?.role==="client"&&user?.client_id){supabase.from("client_credentials").select("*").eq("client_id",user.client_id).order("created_at").then(({data})=>{if(data)setCreds(data)}).catch(()=>{})}},[user?.role,user?.client_id]);
+
+  // Client portal: trigger onboarding if not done
+  useEffect(()=>{if(user?.role==="client"){const cu=clientUsers.find(u=>u.id===user.id);if(cu&&!cu.onboarding_done&&obStep===0)setObStep(1)}},[user,clientUsers]);
 
   // Activity logger
   const logAct=async(action,entityType,entityName)=>{try{await supabase.from("activity_log").insert({action,entity_type:entityType,entity_name:entityName,user_name:user?.name||"Admin"})}catch{}};
@@ -175,21 +185,12 @@ function AppInner(){
 
     const cu=clientUsers.find(u=>u.id===user.id);
     const onboardingDone=cu?.onboarding_done;
-    const[obStep,setObStep]=useState(onboardingDone?0:1);
-    const[creds,setCreds]=useState([]);
-    const[credForm,setCredForm]=useState({platform:"instagram",username:"",password:"",url:"",notes:""});
-    const[showPw,setShowPw]=useState({});
-    const[calComment,setCalComment]=useState("");
-    const[brandComment,setBrandComment]=useState("");
 
-    // Load credentials
-    useEffect(()=>{if(cl.id){supabase.from("client_credentials").select("*").eq("client_id",cl.id).order("created_at").then(({data})=>{if(data)setCreds(data)})}},[cl.id]);
+    const PLATFORMS=[{value:"instagram",label:"Instagram",icon:"📸"},{value:"facebook",label:"Facebook",icon:"📘"},{value:"tiktok",label:"TikTok",icon:"🎵"},{value:"linkedin",label:"LinkedIn",icon:"💼"},{value:"twitter",label:"Twitter/X",icon:"🐦"},{value:"youtube",label:"YouTube",icon:"▶️"},{value:"google_business",label:"Google Business",icon:"📍"},{value:"website",label:"Website (admin)",icon:"🌐"},{value:"email_marketing",label:"Email marketing",icon:"📧"},{value:"hosting",label:"Hosting/Dominio",icon:"🖥️"},{value:"otro",label:"Otro",icon:"🔑"}];
 
     const saveCred=async()=>{if(!credForm.username&&!credForm.password)return;await supabase.from("client_credentials").insert({client_id:cl.id,...credForm}).select().single();const{data}=await supabase.from("client_credentials").select("*").eq("client_id",cl.id).order("created_at");if(data)setCreds(data);setCredForm({platform:"instagram",username:"",password:"",url:"",notes:""});showToast("Credencial guardada")};
     const delCred=async id=>{await supabase.from("client_credentials").delete().eq("id",id);setCreds(creds.filter(c=>c.id!==id));showToast("Credencial eliminada")};
     const finishOnboarding=async()=>{if(cu)await supabase.from("client_users").update({onboarding_done:true}).eq("id",cu.id);setObStep(0)};
-
-    const PLATFORMS=[{value:"instagram",label:"Instagram",icon:"📸"},{value:"facebook",label:"Facebook",icon:"📘"},{value:"tiktok",label:"TikTok",icon:"🎵"},{value:"linkedin",label:"LinkedIn",icon:"💼"},{value:"twitter",label:"Twitter/X",icon:"🐦"},{value:"youtube",label:"YouTube",icon:"▶️"},{value:"google_business",label:"Google Business",icon:"📍"},{value:"website",label:"Website (admin)",icon:"🌐"},{value:"email_marketing",label:"Email marketing",icon:"📧"},{value:"hosting",label:"Hosting/Dominio",icon:"🖥️"},{value:"otro",label:"Otro",icon:"🔑"}];
 
     // ONBOARDING WIZARD (first time only)
     if(obStep>0)return<div style={{fontFamily:F,background:`radial-gradient(ellipse at 50% 0%,${C.s2},${C.bg})`,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><style>{CSS}</style>{toast&&<Toast message={toast.msg} type={toast.type}/>}<div style={{width:"100%",maxWidth:560,animation:"fadeUp .5s ease"}}>
@@ -307,7 +308,7 @@ function AppInner(){
               <div style={{fontSize:11,color:C.td}}>👤 {cr.username}{cr.url?` · 🔗 ${cr.url}`:""}</div>
             </div>
             <div style={{display:"flex",gap:4,alignItems:"center"}}>
-              <button onClick={()=>setShowPw({...showPw,[cr.id]:!showPw[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPw[cr.id]?cr.password:"••••••"}</button>
+              <button onClick={()=>setShowPwMap({...showPwMap,[cr.id]:!showPwMap[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPwMap[cr.id]?cr.password:"••••••"}</button>
               <button onClick={()=>delCred(cr.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:3}}><Ic n="tr" sz={13}/></button>
             </div>
           </div>})}</div>}
@@ -602,5 +603,5 @@ function ClientCreds({clientId}){
   const PLATS=[{value:"instagram",icon:"📸"},{value:"facebook",icon:"📘"},{value:"tiktok",icon:"🎵"},{value:"linkedin",icon:"💼"},{value:"twitter",icon:"🐦"},{value:"youtube",icon:"▶️"},{value:"google_business",icon:"📍"},{value:"website",icon:"🌐"},{value:"email_marketing",icon:"📧"},{value:"hosting",icon:"🖥️"},{value:"otro",icon:"🔑"}];
   useEffect(()=>{if(clientId)supabase.from("client_credentials").select("*").eq("client_id",clientId).order("created_at").then(({data})=>{if(data)setCreds(data)})},[clientId]);
   if(!creds.length)return<p style={{fontSize:11,color:C.td}}>El cliente aún no ha ingresado sus credenciales.</p>;
-  return<div style={{display:"flex",flexDirection:"column",gap:6}}>{creds.map(cr=>{const pl=PLATS.find(p=>p.value===cr.platform)||{icon:"🔑"};return<div key={cr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><span style={{fontSize:14}}>{pl.icon}</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{cr.platform} {cr.username?`— ${cr.username}`:""}</div>{cr.url&&<div style={{fontSize:10,color:C.bl}}>🔗 {cr.url}</div>}</div><button onClick={()=>setShowPw({...showPw,[cr.id]:!showPw[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPw[cr.id]?cr.password:"🔒 Ver"}</button><button onClick={()=>{navigator.clipboard.writeText(cr.password||"");}} style={{background:"none",border:"none",cursor:"pointer",color:C.tm,padding:3,fontSize:10}}>📋</button></div>})}</div>;
+  return<div style={{display:"flex",flexDirection:"column",gap:6}}>{creds.map(cr=>{const pl=PLATS.find(p=>p.value===cr.platform)||{icon:"🔑"};return<div key={cr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><span style={{fontSize:14}}>{pl.icon}</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{cr.platform} {cr.username?`— ${cr.username}`:""}</div>{cr.url&&<div style={{fontSize:10,color:C.bl}}>🔗 {cr.url}</div>}</div><button onClick={()=>setShowPwMap({...showPwMap,[cr.id]:!showPwMap[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPwMap[cr.id]?cr.password:"🔒 Ver"}</button><button onClick={()=>{navigator.clipboard.writeText(cr.password||"");}} style={{background:"none",border:"none",cursor:"pointer",color:C.tm,padding:3,fontSize:10}}>📋</button></div>})}</div>;
 }
