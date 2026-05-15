@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";
 import { supabase } from "./supabase.js";
 import DriveFiles from "./DriveFiles.jsx";
 import KPIDashboard from "./KPIDashboard.jsx";
@@ -91,7 +91,13 @@ function AppInner(){
     setTemplates(await safeQuery("task_templates",{order:"name",asc:true}));
     setAL(await safeQuery("activity_log",{order:"created_at",limit:50}));
   },[]);
-  useEffect(()=>{try{const sess=localStorage.getItem("wauya_user");if(sess){const parsed=JSON.parse(sess);if(parsed&&parsed.role)setUser(parsed);else localStorage.removeItem("wauya_user")}}catch{localStorage.removeItem("wauya_user")}loadAll().catch(()=>{}).finally(()=>setLoading(false))},[loadAll]);
+  useEffect(()=>{
+    // Global error handler - prevents white screen
+    const onErr=e=>{e.preventDefault();console.error("Wauya caught:",e.reason||e.message)};
+    window.addEventListener("unhandledrejection",onErr);
+    try{const sess=localStorage.getItem("wauya_user");if(sess){const parsed=JSON.parse(sess);if(parsed&&parsed.role)setUser(parsed);else localStorage.removeItem("wauya_user")}}catch{localStorage.removeItem("wauya_user")}loadAll().catch(()=>{}).finally(()=>setLoading(false));
+    return()=>window.removeEventListener("unhandledrejection",onErr);
+  },[loadAll]);
 
   // Client portal: load credentials when client user logs in
   useEffect(()=>{if(user?.role==="client"&&user?.client_id){supabase.from("client_credentials").select("*").eq("client_id",user.client_id).order("created_at").then(({data})=>{if(data)setCreds(data)}).catch(()=>{})}},[user?.role,user?.client_id]);
@@ -106,11 +112,11 @@ function AppInner(){
 
   const login=async()=>{setLE("");try{const{data:admin}=await supabase.from("admin_users").select("*").eq("email",loginForm.email).eq("password",loginForm.password).single();if(admin){const u={...admin,role:"master"};delete u.password;setUser(u);localStorage.setItem("wauya_user",JSON.stringify(u));setView("dashboard");return}}catch{}try{const{data:cu}=await supabase.from("client_users").select("*").eq("email",loginForm.email).eq("password",loginForm.password).single();if(cu){const u={...cu,role:"client"};setUser(u);localStorage.setItem("wauya_user",JSON.stringify(u));setView("client_portal");return}}catch{}try{const{data:emp}=await supabase.from("employees").select("*").eq("email",loginForm.email).eq("password",loginForm.password).single();if(emp){const u={...emp,role:"employee"};setUser(u);localStorage.setItem("wauya_user",JSON.stringify(u));setView("emp_portal");return}}catch{}setLE("Credenciales incorrectas")};
   const logout=()=>{setUser(null);setView("dashboard");setSelId(null);localStorage.removeItem("wauya_user")};
-  const dbAdd=async(table,row)=>{setSaving(true);const{data,error}=await supabase.from(table).insert(row).select().single();setSaving(false);if(error){showToast("Error: "+error.message,"error");return null}await loadAll();return data};
-  const dbUpd=async(table,id,upd)=>{setSaving(true);await supabase.from(table).update(upd).eq("id",id);setSaving(false);await loadAll()};
-  const dbDel=async(table,id)=>{setSaving(true);await supabase.from(table).delete().eq("id",id);setSaving(false);await loadAll()};
-  const uploadFile=async(file,ot,oid,ft)=>{setSaving(true);const ext=file.name.split(".").pop();const path=`${ot}/${oid}/${Date.now()}.${ext}`;const{error:e}=await supabase.storage.from("wauya-files").upload(path,file);if(e){setSaving(false);showToast(e.message,"error");return}const{data:u}=supabase.storage.from("wauya-files").getPublicUrl(path);await supabase.from("files").insert({owner_type:ot,owner_id:oid,name:file.name,file_type:ft,size:(file.size/1024).toFixed(1)+" KB",storage_path:path,url:u?.publicUrl||""});setSaving(false);await loadAll();setModal(null);showToast("Archivo subido")};
-  const deleteFile=async fid=>{const f=files.find(x=>x.id===fid);if(f?.storage_path)await supabase.storage.from("wauya-files").remove([f.storage_path]);await dbDel("files",fid)};
+  const dbAdd=async(table,row)=>{try{setSaving(true);const{data,error}=await supabase.from(table).insert(row).select().single();setSaving(false);if(error){showToast("Error: "+error.message,"error");return null}await loadAll();return data}catch(e){setSaving(false);showToast("Error: "+e.message,"error");return null}};
+  const dbUpd=async(table,id,upd)=>{try{setSaving(true);await supabase.from(table).update(upd).eq("id",id);setSaving(false);await loadAll()}catch(e){setSaving(false);showToast("Error: "+e.message,"error")}};
+  const dbDel=async(table,id)=>{try{setSaving(true);await supabase.from(table).delete().eq("id",id);setSaving(false);await loadAll()}catch(e){setSaving(false);showToast("Error: "+e.message,"error")}};
+  const uploadFile=async(file,ot,oid,ft)=>{try{setSaving(true);const ext=file.name.split(".").pop();const path=`${ot}/${oid}/${Date.now()}.${ext}`;const{error:e}=await supabase.storage.from("wauya-files").upload(path,file);if(e){setSaving(false);showToast(e.message,"error");return}const{data:u}=supabase.storage.from("wauya-files").getPublicUrl(path);await supabase.from("files").insert({owner_type:ot,owner_id:oid,name:file.name,file_type:ft,size:(file.size/1024).toFixed(1)+" KB",storage_path:path,url:u?.publicUrl||""});setSaving(false);await loadAll();setModal(null);showToast("Archivo subido")}catch(e){setSaving(false);showToast("Error: "+e.message,"error")}};
+  const deleteFile=async fid=>{try{const f=files.find(x=>x.id===fid);if(f?.storage_path)await supabase.storage.from("wauya-files").remove([f.storage_path]);await dbDel("files",fid)}catch(e){showToast("Error: "+e.message,"error")}};
   const addProspect=async p=>{const d=await dbAdd("prospects",{...p,pipeline_status:"nuevo"});if(d){await logAct("Creó prospecto","prospect",p.company||p.name);showToast("Prospecto creado")}setModal(null)};
   const updProspect=async(id,u)=>dbUpd("prospects",id,u);
   const delProspect=async id=>{const p=prospects.find(x=>x.id===id);if(!confirm("¿Eliminar?"))return;await dbDel("prospects",id);if(p)await logAct("Eliminó prospecto","prospect",p.company||p.name);if(selId===id)setSelId(null)};
@@ -132,13 +138,13 @@ function AppInner(){
   function shiftDate(dateStr,days){const d=new Date(dateStr);d.setDate(d.getDate()+days);return d.toISOString().split("T")[0]}
 
   // DUPLICATE multiple tasks (week or period)
-  const dupPeriod=async(tasksToClone,dayShift)=>{if(!tasksToClone.length)return;setSaving(true);for(const td of tasksToClone){const newStart=td.start_date?shiftDate(td.start_date,dayShift):"";const newEnd=td.end_date?shiftDate(td.end_date,dayShift):"";await supabase.from("todos").insert({title:td.title,description:td.description,priority:td.priority,status:"pendiente",assigned_to:td.assigned_to||null,assigned_to_2:td.assigned_to_2||null,start_date:newStart,end_date:newEnd,category:td.category,client_id:td.client_id||null,prospect_id:td.prospect_id||null,url:td.url,project_type:td.project_type})}await logAct("Duplicó "+tasksToClone.length+" tareas","todo","periodo +"+dayShift+" días");setSaving(false);await loadAll();showToast(`${tasksToClone.length} tareas duplicadas (+${dayShift} días)`)};
+  const dupPeriod=async(tasksToClone,dayShift)=>{try{if(!tasksToClone.length)return;setSaving(true);for(const td of tasksToClone){const newStart=td.start_date?shiftDate(td.start_date,dayShift):"";const newEnd=td.end_date?shiftDate(td.end_date,dayShift):"";await supabase.from("todos").insert({title:td.title,description:td.description,priority:td.priority,status:"pendiente",assigned_to:td.assigned_to||null,assigned_to_2:td.assigned_to_2||null,start_date:newStart,end_date:newEnd,category:td.category,client_id:td.client_id||null,prospect_id:td.prospect_id||null,url:td.url,project_type:td.project_type})}await logAct("Duplicó "+tasksToClone.length+" tareas","todo","periodo +"+dayShift+" días");setSaving(false);await loadAll();showToast(`${tasksToClone.length} tareas duplicadas (+${dayShift} días)`)}catch(e){setSaving(false);showToast("Error: "+e.message,"error")}};
 
   // TIME TRACKING
   const addTimeEntry=async(entry)=>{await dbAdd("time_entries",entry);await logAct("Registró "+entry.hours+"h","time",entry.description||"");showToast(entry.hours+"h registradas");setModal(null)};
 
   // APPLY TEMPLATE
-  const applyTemplate=async(templateId,targetType,targetId)=>{
+  const applyTemplate=async(templateId,targetType,targetId)=>{try{
     const tpl=templates.find(t=>t.id===templateId);if(!tpl)return;
     setSaving(true);const tasks=typeof tpl.tasks==="string"?JSON.parse(tpl.tasks):tpl.tasks;
     for(const task of tasks){
@@ -149,10 +155,10 @@ function AppInner(){
     }
     await logAct("Aplicó template","template",tpl.name+" ("+tasks.length+" tareas)");
     setSaving(false);await loadAll();setModal(null);showToast(`${tasks.length} tareas creadas desde "${tpl.name}"`);
-  };
+  }catch(e){setSaving(false);showToast("Error: "+e.message,"error")}};
 
   const syncFromDrive=async folderUrl=>{const fid=extractFolderId(folderUrl);if(!fid){showToast("URL no válida","error");return}setSaving(true);setSyncStatus("Escaneando...");try{const res=await fetch(`/api/drive?action=list&folderId=${fid}`);const items=await res.json();if(items.error){showToast(items.error,"error");setSaving(false);setSyncStatus("");return}const folders=items.filter(f=>f.mimeType==="application/vnd.google-apps.folder");let cr=0,sk=0;for(const fo of folders){if(prospects.find(p=>(p.company||"").toLowerCase()===fo.name.toLowerCase())||clients.find(c=>(c.company||"").toLowerCase()===fo.name.toLowerCase())){sk++;continue}await supabase.from("prospects").insert({name:fo.name,company:fo.name,drive_folder_id:fo.id,pipeline_status:"nuevo"});cr++}await loadAll();setSyncStatus("");setSaving(false);setModal(null);localStorage.setItem("wauya_leads_folder",folderUrl);showToast(`${cr} creados · ${sk} existían`)}catch(e){showToast(e.message,"error");setSaving(false);setSyncStatus("")}};
-  const handleQBR=async client=>{if(!client.sheet_id){generateQBR(client,null);return}try{const r=await fetch(`/api/sheets?sheetId=${client.sheet_id}&range=KPIs!A1:Z50`);const d=await r.json();generateQBR(client,Array.isArray(d)?d:null)}catch{generateQBR(client,null)}};
+  const handleQBR=async client=>{try{if(!client?.sheet_id){generateQBR(client,null);return}const r=await fetch(`/api/sheets?sheetId=${client.sheet_id}&range=KPIs!A1:Z50`);const d=await r.json();generateQBR(client,Array.isArray(d)?d:null)}catch{generateQBR(client,null)}};
 
   const prospFiles=pid=>files.filter(f=>f.owner_type==="prospect"&&f.owner_id===pid);
   const clientFiles=cid=>files.filter(f=>f.owner_type==="client"&&f.owner_id===cid);
@@ -188,9 +194,9 @@ function AppInner(){
 
     const PLATFORMS=[{value:"instagram",label:"Instagram",icon:"📸"},{value:"facebook",label:"Facebook",icon:"📘"},{value:"tiktok",label:"TikTok",icon:"🎵"},{value:"linkedin",label:"LinkedIn",icon:"💼"},{value:"twitter",label:"Twitter/X",icon:"🐦"},{value:"youtube",label:"YouTube",icon:"▶️"},{value:"google_business",label:"Google Business",icon:"📍"},{value:"website",label:"Website (admin)",icon:"🌐"},{value:"email_marketing",label:"Email marketing",icon:"📧"},{value:"hosting",label:"Hosting/Dominio",icon:"🖥️"},{value:"otro",label:"Otro",icon:"🔑"}];
 
-    const saveCred=async()=>{if(!credForm.username&&!credForm.password)return;await supabase.from("client_credentials").insert({client_id:cl.id,...credForm}).select().single();const{data}=await supabase.from("client_credentials").select("*").eq("client_id",cl.id).order("created_at");if(data)setCreds(data);setCredForm({platform:"instagram",username:"",password:"",url:"",notes:""});showToast("Credencial guardada")};
-    const delCred=async id=>{await supabase.from("client_credentials").delete().eq("id",id);setCreds(creds.filter(c=>c.id!==id));showToast("Credencial eliminada")};
-    const finishOnboarding=async()=>{if(cu)await supabase.from("client_users").update({onboarding_done:true}).eq("id",cu.id);setObStep(0)};
+    const saveCred=async()=>{try{if(!credForm.username&&!credForm.password)return;await supabase.from("client_credentials").insert({client_id:cl.id,...credForm});const{data}=await supabase.from("client_credentials").select("*").eq("client_id",cl.id).order("created_at");if(data)setCreds(data);setCredForm({platform:"instagram",username:"",password:"",url:"",notes:""});showToast("Credencial guardada")}catch(e){showToast("Error: "+e.message,"error")}};
+    const delCred=async id=>{try{await supabase.from("client_credentials").delete().eq("id",id);setCreds(creds.filter(c=>c.id!==id));showToast("Credencial eliminada")}catch(e){showToast("Error: "+e.message,"error")}};
+    const finishOnboarding=async()=>{try{if(cu)await supabase.from("client_users").update({onboarding_done:true}).eq("id",cu.id);setObStep(0)}catch(e){showToast("Error: "+e.message,"error")}};
 
     // ONBOARDING WIZARD (first time only)
     if(obStep>0)return<div style={{fontFamily:F,background:`radial-gradient(ellipse at 50% 0%,${C.s2},${C.bg})`,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><style>{CSS}</style>{toast&&<Toast message={toast.msg} type={toast.type}/>}<div style={{width:"100%",maxWidth:560,animation:"fadeUp .5s ease"}}>
@@ -597,11 +603,62 @@ function FDupPeriod({todos,clients,prospects,onDuplicate,onX}){
 // ─── SERVICE FORM (mensual / único / mixto) ───
 
 
-// ─── CLIENT CREDENTIALS VIEWER (admin) ───
+// ─── CLIENT CREDENTIALS (admin: view + add + edit + delete) ───
 function ClientCreds({clientId}){
-  const[creds,setCreds]=useState([]);const[showPw,setShowPw]=useState({});
-  const PLATS=[{value:"instagram",icon:"📸"},{value:"facebook",icon:"📘"},{value:"tiktok",icon:"🎵"},{value:"linkedin",icon:"💼"},{value:"twitter",icon:"🐦"},{value:"youtube",icon:"▶️"},{value:"google_business",icon:"📍"},{value:"website",icon:"🌐"},{value:"email_marketing",icon:"📧"},{value:"hosting",icon:"🖥️"},{value:"otro",icon:"🔑"}];
-  useEffect(()=>{if(clientId)supabase.from("client_credentials").select("*").eq("client_id",clientId).order("created_at").then(({data})=>{if(data)setCreds(data)}).catch(()=>{})},[clientId]);
-  if(!creds.length)return<p style={{fontSize:11,color:C.td}}>El cliente aún no ha ingresado sus credenciales.</p>;
-  return<div style={{display:"flex",flexDirection:"column",gap:6}}>{creds.map(cr=>{const pl=PLATS.find(p=>p.value===cr.platform)||{icon:"🔑"};return<div key={cr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}><span style={{fontSize:14}}>{pl.icon}</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.tx}}>{cr.platform} {cr.username?`— ${cr.username}`:""}</div>{cr.url&&<div style={{fontSize:10,color:C.bl}}>🔗 {cr.url}</div>}</div><button onClick={()=>setShowPw({...showPw,[cr.id]:!showPw[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPw[cr.id]?cr.password:"🔒 Ver"}</button><button onClick={()=>{navigator.clipboard.writeText(cr.password||"")}} style={{background:"none",border:"none",cursor:"pointer",color:C.tm,padding:3,fontSize:10}}>📋</button></div>})}</div>;
+  const[creds,setCreds]=useState([]);const[showPw,setShowPw]=useState({});const[editing,setEditing]=useState(null);
+  const[addForm,setAddForm]=useState(null);
+  const PLATS=[{value:"instagram",label:"Instagram",icon:"📸"},{value:"facebook",label:"Facebook",icon:"📘"},{value:"tiktok",label:"TikTok",icon:"🎵"},{value:"linkedin",label:"LinkedIn",icon:"💼"},{value:"twitter",label:"Twitter/X",icon:"🐦"},{value:"youtube",label:"YouTube",icon:"▶️"},{value:"google_business",label:"Google Business",icon:"📍"},{value:"website",label:"Website",icon:"🌐"},{value:"email_marketing",label:"Email marketing",icon:"📧"},{value:"hosting",label:"Hosting",icon:"🖥️"},{value:"otro",label:"Otro",icon:"🔑"}];
+  const reload=async()=>{try{const{data}=await supabase.from("client_credentials").select("*").eq("client_id",clientId).order("created_at");if(data)setCreds(data)}catch{}};
+  useEffect(()=>{if(clientId)reload()},[clientId]);
+
+  const saveCred=async(form)=>{try{if(!form.username&&!form.password)return;await supabase.from("client_credentials").insert({client_id:clientId,...form});await reload();setAddForm(null)}catch{}};
+  const updateCred=async(id,upd)=>{try{await supabase.from("client_credentials").update(upd).eq("id",id);await reload();setEditing(null)}catch{}};
+  const deleteCred=async(id)=>{try{if(!confirm("¿Eliminar credencial?"))return;await supabase.from("client_credentials").delete().eq("id",id);await reload()}catch{}};
+
+  return<div>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><button onClick={()=>setAddForm(addForm?null:{platform:"instagram",username:"",password:"",url:""})} style={{background:addForm?"transparent":`linear-gradient(135deg,${C.acc},#D4A00E)`,color:addForm?C.tm:"#060B18",border:`1px solid ${addForm?C.b:C.acc}`,borderRadius:8,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:F}}>{addForm?"✕ Cancelar":"+ Agregar credencial"}</button></div>
+
+    {addForm&&<div style={{background:C.bg,borderRadius:10,padding:14,border:`1px solid ${C.acc}30`,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+        <Sel value={addForm.platform} onChange={e=>setAddForm({...addForm,platform:e.target.value})} options={PLATS}/>
+        <Inp value={addForm.username} onChange={e=>setAddForm({...addForm,username:e.target.value})} placeholder="Usuario / email"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+        <Inp value={addForm.password} onChange={e=>setAddForm({...addForm,password:e.target.value})} placeholder="Contraseña"/>
+        <Inp value={addForm.url} onChange={e=>setAddForm({...addForm,url:e.target.value})} placeholder="URL (opcional)"/>
+      </div>
+      <Btn onClick={()=>saveCred(addForm)} sz="sm">Guardar</Btn>
+    </div>}
+
+    {creds.length===0&&!addForm&&<p style={{fontSize:11,color:C.td}}>Sin credenciales aún. El cliente las puede ingresar desde su portal, o agrégalas tú.</p>}
+
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>{creds.map(cr=>{
+      const pl=PLATS.find(p=>p.value===cr.platform)||{icon:"🔑",label:cr.platform};
+      const isEdit=editing===cr.id;
+
+      if(isEdit)return<div key={cr.id} style={{padding:"10px 12px",background:C.bg,borderRadius:10,border:`1px solid ${C.acc}30`}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+          <Sel value={cr.platform} onChange={e=>{setCreds(creds.map(c=>c.id===cr.id?{...c,platform:e.target.value}:c))}} options={PLATS}/>
+          <Inp value={cr.username} onChange={e=>{setCreds(creds.map(c=>c.id===cr.id?{...c,username:e.target.value}:c))}} placeholder="Usuario"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+          <Inp value={cr.password} onChange={e=>{setCreds(creds.map(c=>c.id===cr.id?{...c,password:e.target.value}:c))}} placeholder="Contraseña"/>
+          <Inp value={cr.url||""} onChange={e=>{setCreds(creds.map(c=>c.id===cr.id?{...c,url:e.target.value}:c))}} placeholder="URL"/>
+        </div>
+        <div style={{display:"flex",gap:6}}><Btn onClick={()=>updateCred(cr.id,{platform:cr.platform,username:cr.username,password:cr.password,url:cr.url})} sz="sm">Guardar</Btn><Btn onClick={()=>{setEditing(null);reload()}} v="ghost" sz="sm">Cancelar</Btn></div>
+      </div>;
+
+      return<div key={cr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.bg,borderRadius:8,border:`1px solid ${C.b}`}}>
+        <span style={{fontSize:14}}>{pl.icon}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:500,color:C.tx}}>{pl.label} {cr.username?`— ${cr.username}`:""}</div>
+          {cr.url&&<div style={{fontSize:10,color:C.bl}}>🔗 {cr.url}</div>}
+        </div>
+        <button onClick={()=>setShowPw({...showPw,[cr.id]:!showPw[cr.id]})} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"4px 8px",color:C.tm,cursor:"pointer",fontSize:10,fontFamily:F}}>{showPw[cr.id]?cr.password:"🔒 Ver"}</button>
+        <button onClick={()=>{navigator.clipboard.writeText(cr.password||"")}} style={{background:"none",border:"none",cursor:"pointer",color:C.tm,padding:3,fontSize:10}} title="Copiar contraseña">📋</button>
+        <button onClick={()=>setEditing(cr.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.bl,padding:3,fontSize:10}} title="Editar">✏️</button>
+        <button onClick={()=>deleteCred(cr.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:3,fontSize:10}} title="Eliminar">🗑️</button>
+      </div>;
+    })}</div>
+  </div>;
 }
