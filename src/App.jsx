@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";
 import { supabase } from "./supabase.js";
 import DriveFiles from "./DriveFiles.jsx";
 import KPIDashboard from "./KPIDashboard.jsx";
@@ -77,6 +77,7 @@ function AppInner(){
   const[obStep,setObStep]=useState(0);const[creds,setCreds]=useState([]);
   const[credForm,setCredForm]=useState({platform:"instagram",username:"",password:"",url:"",notes:""});
   const[showPwMap,setShowPwMap]=useState({});const[calComment,setCalComment]=useState("");const[brandComment,setBrandComment]=useState("");
+  const[cmdOpen,setCmdOpen]=useState(false);const[cmdQuery,setCmdQuery]=useState("");const[fabOpen,setFabOpen]=useState(false);
 
   const safeQuery=async(table,opts={})=>{try{let q=supabase.from(table).select("*");if(opts.order)q=q.order(opts.order,{ascending:opts.asc??false});if(opts.limit)q=q.limit(opts.limit);const{data}=await q;return data||[]}catch{return[]}};
   const loadAll=useCallback(async()=>{
@@ -99,7 +100,13 @@ function AppInner(){
     return()=>window.removeEventListener("unhandledrejection",onErr);
   },[loadAll]);
 
-  // Client portal: load credentials when client user logs in
+  // Cmd+K listener
+  useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==="k"){e.preventDefault();setCmdOpen(o=>!o);setCmdQuery("")}if(e.key==="Escape")setCmdOpen(false)};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h)},[]);
+
+  // Client Health Score (0-100)
+  const getHealthScore=(cl)=>{try{let score=50;const clTodos=todos.filter(t=>t.client_id===cl.id);const total=clTodos.length||1;const done=clTodos.filter(t=>t.status==="completado").length;score+=Math.round((done/total)*20);if(cl.brand_status==="aprobado")score+=10;if(cl.calendar_status==="aprobado")score+=10;if(cl.billing_status==="activo")score+=10;else if(cl.billing_status==="vencido")score-=20;const overdue=clTodos.filter(t=>t.end_date&&t.status!=="completado"&&t.end_date<todayStr()).length;score-=overdue*5;return Math.max(0,Math.min(100,score))}catch{return 50}};
+  const getHealthColor=(score)=>score>=70?C.g:score>=40?C.w:C.r;
+  const getHealthLabel=(score)=>score>=70?"Saludable":score>=40?"Atención":"Riesgo";
   useEffect(()=>{if(user?.role==="client"&&user?.client_id){supabase.from("client_credentials").select("*").eq("client_id",user.client_id).order("created_at").then(({data})=>{if(data)setCreds(data)}).catch(()=>{})}},[user?.role,user?.client_id]);
 
   // Client portal: trigger onboarding if not done
@@ -361,7 +368,7 @@ function AppInner(){
       {/* TOP BAR */}
       <div style={{display:"flex",alignItems:"center",gap:10,padding:isMobile?"10px 16px":"12px 32px",borderBottom:`1px solid ${C.b}`,position:"sticky",top:0,background:`${C.bg}ee`,zIndex:50,backdropFilter:"blur(12px)"}}>
         {isMobile&&<button onClick={()=>setMM(!mobileMenu)} style={{background:"none",border:"none",color:C.tm,cursor:"pointer",padding:4}}><Ic n="menu" sz={22}/></button>}
-        <div style={{flex:1,position:"relative"}}><div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={14}/></div><input value={globalSearch} onChange={e=>{setGS(e.target.value);setGSOpen(true)}} onFocus={()=>setGSOpen(true)} placeholder="Buscar en todo..." style={{width:"100%",background:`linear-gradient(145deg,${C.s},${C.s2})`,border:`1px solid ${C.b}`,borderRadius:10,padding:"8px 10px 8px 32px",color:C.tx,fontSize:12,fontFamily:F,outline:"none",transition:"all .2s"}}/>{gsOpen&&<SearchResults q={globalSearch} prospects={prospects} clients={clients} employees={employees} todos={todos} onSelect={(v,id)=>{setView(v);setSelId(id)}} onClose={()=>{setGSOpen(false);setGS("")}}/>}</div>
+        <div style={{flex:1,position:"relative"}}><div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={14}/></div><input value={globalSearch} onChange={e=>{setGS(e.target.value);setGSOpen(true)}} onFocus={()=>setGSOpen(true)} placeholder="Buscar... (2318K)" style={{width:"100%",background:`linear-gradient(145deg,${C.s},${C.s2})`,border:`1px solid ${C.b}`,borderRadius:10,padding:"8px 10px 8px 32px",color:C.tx,fontSize:12,fontFamily:F,outline:"none",transition:"all .2s"}}/>{gsOpen&&<SearchResults q={globalSearch} prospects={prospects} clients={clients} employees={employees} todos={todos} onSelect={(v,id)=>{setView(v);setSelId(id)}} onClose={()=>{setGSOpen(false);setGS("")}}/>}</div>
         <div style={{position:"relative"}}><button onClick={()=>setNO(!notifOpen)} style={{background:"none",border:"none",color:notifs.length>0?C.w:C.tm,cursor:"pointer",padding:6,position:"relative"}}><Ic n="bell" sz={20}/>{notifs.length>0&&<span style={{position:"absolute",top:2,right:2,width:16,height:16,borderRadius:8,background:C.r,color:"#fff",fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{notifs.length}</span>}</button>{notifOpen&&<div style={{position:"absolute",top:"100%",right:0,width:isMobile?280:360,background:C.s,border:`1px solid ${C.b}`,borderRadius:12,zIndex:100,marginTop:8,maxHeight:400,overflow:"auto"}}><div style={{padding:"12px 16px",borderBottom:`1px solid ${C.b}`,display:"flex",justifyContent:"space-between"}}><span style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>Notificaciones ({notifs.length})</span><button onClick={()=>setNO(false)} style={{background:"none",border:"none",color:C.tm,cursor:"pointer"}}>✕</button></div>{notifs.length===0?<div style={{padding:20,textAlign:"center",fontSize:12,color:C.td}}>Todo en orden 🎉</div>:notifs.map(n=><div key={n.id} onClick={()=>{if(n.linkId){setView(n.view);setSelId(n.linkId)}else setView(n.view);setNO(false)}} style={{padding:"10px 16px",borderBottom:`1px solid ${C.b}10`,cursor:"pointer",display:"flex",gap:8}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><span style={{fontSize:14,flexShrink:0}}>{n.icon}</span><div style={{fontSize:12,color:C.tx,lineHeight:1.4}}>{n.msg}</div></div>)}</div>}</div>
       </div>
       {gsOpen&&<div onClick={()=>setGSOpen(false)} style={{position:"fixed",inset:0,zIndex:49}}/>}
@@ -375,6 +382,8 @@ function AppInner(){
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.tx,marginBottom:16}}>Proyectos</h3><div style={{display:"flex",alignItems:"center",gap:20}}><Donut data={stats.sc.map(s=>({value:s.count,color:s.color}))}/><div style={{display:"flex",flexDirection:"column",gap:5}}>{stats.sc.map(s=><div key={s.value} style={{display:"flex",alignItems:"center",gap:7,fontSize:11}}><div style={{width:8,height:8,borderRadius:2,background:s.color}}/><span style={{color:C.tm}}>{s.label}</span><span style={{color:C.tx,fontWeight:700,marginLeft:"auto"}}>{s.count}</span></div>)}</div></div></Card>
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.tx,marginBottom:16}}>Rentabilidad por cliente</h3>{clientProfit.filter(c=>c.revenue>0||c.hours>0).length===0?<p style={{fontSize:12,color:C.td}}>Sin datos aún</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{clientProfit.filter(c=>c.revenue>0||c.hours>0).slice(0,5).map(cp=><div key={cp.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}><span style={{flex:1,color:C.tx,fontWeight:500}}>{cp.company||cp.name}</span><span style={{color:C.g}}>💰${cp.revenue}</span><span style={{color:C.p}}>⏱{cp.hours.toFixed(1)}h</span><span style={{color:cp.margin>=50?C.g:cp.margin>=20?C.w:C.r,fontWeight:700}}>{cp.margin}%</span></div>)}</div>}</Card>
         </div>
+        {/* CLIENT HEALTH SCORES */}
+        {clients.length>0&&<Card style={{marginTop:16}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.tx,marginBottom:16}}>❤️ Salud de clientes</h3><div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{clients.map(cl=>{const hs=getHealthScore(cl);const hc=getHealthColor(hs);return<div key={cl.id} onClick={()=>{setView("clients");setSelId(cl.id)}} style={{background:hc+"10",border:`1px solid ${hc}30`,borderRadius:12,padding:"10px 14px",cursor:"pointer",textAlign:"center",minWidth:80,transition:"all .2s"}} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}><div style={{fontFamily:D,fontSize:22,fontWeight:800,color:hc}}>{hs}</div><div style={{fontSize:10,fontWeight:500,color:C.tx,marginTop:2}}>{cl.company||cl.name}</div><div style={{fontSize:9,color:hc,marginTop:1}}>{getHealthLabel(hs)}</div></div>})}</div></Card>}
         <div style={{display:"grid",gridTemplateColumns:g1,gap:16}}>
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.tx,marginBottom:16}}>Carga por empleado</h3>{stats.el.length===0?<p style={{fontSize:12,color:C.td}}>Sin empleados</p>:<div style={{display:"flex",flexDirection:"column",gap:6}}>{stats.el.map(e=><div key={e.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}><span style={{flex:1,color:C.tx}}>{e.name}</span><span style={{color:C.bl}}>{e.tc} tareas</span><span style={{color:C.p}}>⏱{e.hrs.toFixed(1)}h</span></div>)}</div>}</Card>
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:700,color:C.tx,marginBottom:16}}>Actividad reciente</h3>{activityLog.length===0?<p style={{fontSize:12,color:C.td}}>Sin actividad</p>:<div style={{display:"flex",flexDirection:"column",gap:4}}>{activityLog.slice(0,8).map(a=><div key={a.id} style={{fontSize:11,color:C.tm,padding:"4px 0",borderBottom:`1px solid ${C.b}10`}}><span style={{color:C.tx,fontWeight:500}}>{a.user_name}</span> {a.action} <span style={{color:C.acc}}>{a.entity_name}</span><span style={{color:C.td,marginLeft:8,fontSize:9}}>{new Date(a.created_at).toLocaleDateString("es",{day:"2-digit",month:"short"})}</span></div>)}</div>}</Card>
@@ -402,7 +411,7 @@ function AppInner(){
       </div>}
 
       {/* CLIENTS LIST */}
-      {view==="clients"&&!selId&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Clientes</h1><Btn onClick={()=>setModal("add_client")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div><div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>{filt(clients).length===0?<Empty icon="💼" title="Sin clientes" sub="Convierte un prospecto o crea un cliente directo" action={()=>setModal("add_client")} actionLabel="+ Nuevo cliente"/>:<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>{filt(clients).map(cl=>{const cp=clientProfit.find(x=>x.id===cl.id);return<Card key={cl.id} hover onClick={()=>setSelId(cl.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{cl.company||cl.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{cl.name}</div></div><SBadge status={cl.status}/></div>{cl.services&&<div style={{fontSize:11,color:C.td,marginBottom:6}}>🎯 {cl.services}</div>}<div style={{display:"flex",gap:10,fontSize:10,color:C.td,flexWrap:"wrap"}}><span><Ic n="todo" sz={11}/>{todos.filter(td=>td.client_id===cl.id).length}</span>{cl.monthly_fee>0&&<span style={{color:C.g}}>💰${cl.monthly_fee}/mes</span>}{cp&&cp.hours>0&&<span style={{color:C.bl}}>⏱{cp.hours.toFixed(1)}h</span>}</div></Card>})}</div>}</div>}
+      {view==="clients"&&!selId&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Clientes</h1><Btn onClick={()=>setModal("add_client")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div><div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>{filt(clients).length===0?<Empty icon="💼" title="Sin clientes" sub="Convierte un prospecto o crea un cliente directo" action={()=>setModal("add_client")} actionLabel="+ Nuevo cliente"/>:<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>{filt(clients).map(cl=>{const cp=clientProfit.find(x=>x.id===cl.id);return<Card key={cl.id} hover onClick={()=>setSelId(cl.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{cl.company||cl.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{cl.name}</div></div><div style={{display:"flex",gap:6,alignItems:"flex-start"}}>{(()=>{const hs=getHealthScore(cl);return<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:getHealthColor(hs)+"18",color:getHealthColor(hs)}}>{hs}</span>})()}<SBadge status={cl.status}/></div></div>{cl.services&&<div style={{fontSize:11,color:C.td,marginBottom:6}}>🎯 {cl.services}</div>}<div style={{display:"flex",gap:10,fontSize:10,color:C.td,flexWrap:"wrap"}}><span><Ic n="todo" sz={11}/>{todos.filter(td=>td.client_id===cl.id).length}</span>{cl.monthly_fee>0&&<span style={{color:C.g}}>💰${cl.monthly_fee}/mes</span>}{cp&&cp.hours>0&&<span style={{color:C.bl}}>⏱{cp.hours.toFixed(1)}h</span>}</div></Card>})}</div>}</div>}
 
       {/* CLIENT DETAIL with templates + time */}
       {view==="clients"&&selId&&sc&&<div>
@@ -464,6 +473,60 @@ function AppInner(){
     {modal?.type==="edit_user"&&<Mod title="Editar Usuario" onClose={()=>setModal(null)}><FEditUser user={modal.user} table={modal.table} onDone={async upd=>{await dbUpd(modal.table,modal.user.id,upd);setModal(null)}} onX={()=>setModal(null)}/></Mod>}
     {modal?.type==="onboarding"&&<Mod title="Onboarding — Nuevo Cliente" onClose={()=>setModal(null)} w={640}><FOnboarding prospect={modal.prospect} onDone={(id,data)=>convertProspect(id,data)} onX={()=>setModal(null)}/></Mod>}
     {modal?.type==="dup_period"&&<Mod title="Duplicar periodo de tareas" onClose={()=>setModal(null)} w={560}><FDupPeriod todos={todos} clients={clients} prospects={prospects} onDuplicate={dupPeriod} onX={()=>setModal(null)}/></Mod>}
+
+    {/* COMMAND PALETTE (Cmd+K) */}
+    {cmdOpen&&user?.role==="master"&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:3000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"15vh",backdropFilter:"blur(8px)"}} onClick={e=>{if(e.target===e.currentTarget)setCmdOpen(false)}}>
+      <div style={{width:"92%",maxWidth:560,background:`linear-gradient(145deg,${C.s},${C.bg})`,borderRadius:16,border:`1px solid ${C.acc}30`,boxShadow:`0 20px 60px rgba(0,0,0,.5),0 0 30px ${C.acc}10`,animation:"modalIn .2s ease",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 16px",borderBottom:`1px solid ${C.b}`}}>
+          <span style={{color:C.acc,fontSize:16}}>⌘</span>
+          <input value={cmdQuery} onChange={e=>setCmdQuery(e.target.value)} autoFocus placeholder="Buscar clientes, tareas, acciones..." style={{flex:1,background:"transparent",border:"none",color:C.tx,fontSize:15,fontFamily:F,outline:"none"}}/>
+          <span style={{fontSize:10,color:C.td,padding:"2px 6px",border:`1px solid ${C.b}`,borderRadius:4}}>ESC</span>
+        </div>
+        <div style={{maxHeight:360,overflow:"auto",padding:8}}>
+          {(()=>{const q=cmdQuery.toLowerCase();const results=[];
+            if(!q||q.length<1){results.push({type:"action",icon:"📋",label:"Crear nueva tarea",fn:()=>{setCmdOpen(false);setModal({type:"add_todo_global",defaults:{}})}});results.push({type:"action",icon:"🎯",label:"Nuevo prospecto",fn:()=>{setCmdOpen(false);setModal("add_prospect")}});results.push({type:"action",icon:"💼",label:"Nuevo cliente",fn:()=>{setCmdOpen(false);setModal("add_client")}});results.push({type:"nav",icon:"📊",label:"Ir al Dashboard",fn:()=>{setCmdOpen(false);setView("dashboard")}});results.push({type:"nav",icon:"📅",label:"Ir al Cronograma",fn:()=>{setCmdOpen(false);setView("timeline")}});results.push({type:"nav",icon:"💸",label:"Ir a Gastos",fn:()=>{setCmdOpen(false);setView("gastos")}});results.push({type:"nav",icon:"🔀",label:"Ir al Pipeline",fn:()=>{setCmdOpen(false);setView("pipeline")}});
+            }else{
+              clients.filter(c=>(c.company+c.name+(c.email||"")).toLowerCase().includes(q)).slice(0,4).forEach(c=>results.push({type:"client",icon:"💼",label:c.company||c.name,sub:c.email,fn:()=>{setCmdOpen(false);setView("clients");setSelId(c.id)}}));
+              prospects.filter(p=>(p.company+p.name+(p.email||"")).toLowerCase().includes(q)).slice(0,3).forEach(p=>results.push({type:"prospect",icon:"🎯",label:p.company||p.name,sub:p.email,fn:()=>{setCmdOpen(false);setView("prospects");setSelId(p.id)}}));
+              todos.filter(t=>(t.title+(t.description||"")).toLowerCase().includes(q)).slice(0,4).forEach(t=>results.push({type:"task",icon:"📋",label:t.title,sub:t.status,fn:()=>{setCmdOpen(false);setView(t.client_id?"clients":"timeline");if(t.client_id)setSelId(t.client_id)}}));
+              employees.filter(e=>(e.name+(e.email||"")).toLowerCase().includes(q)).slice(0,2).forEach(e=>results.push({type:"employee",icon:"👤",label:e.name,sub:e.role,fn:()=>{setCmdOpen(false);setView("employees")}}));
+              if("tarea task crear nueva".includes(q))results.push({type:"action",icon:"➕",label:"Crear nueva tarea",fn:()=>{setCmdOpen(false);setModal({type:"add_todo_global",defaults:{}})}});
+              if("prospecto lead nuevo".includes(q))results.push({type:"action",icon:"➕",label:"Nuevo prospecto",fn:()=>{setCmdOpen(false);setModal("add_prospect")}});
+              if("reporte financiero descargar".includes(q))results.push({type:"action",icon:"📥",label:"Descargar reporte financiero",fn:()=>{setCmdOpen(false);document.querySelector("[data-download-finance]")?.click()}});
+            }
+            if(!results.length)return<div style={{padding:20,textAlign:"center",color:C.td,fontSize:13}}>Sin resultados para "{cmdQuery}"</div>;
+            const grouped={};results.forEach(r=>{const g=r.type==="action"?"Acciones":r.type==="nav"?"Navegación":r.type==="client"?"Clientes":r.type==="prospect"?"Prospectos":r.type==="task"?"Tareas":"Equipo";if(!grouped[g])grouped[g]=[];grouped[g].push(r)});
+            return Object.entries(grouped).map(([group,items])=><div key={group}>
+              <div style={{fontSize:10,fontWeight:700,color:C.td,padding:"8px 10px 4px",textTransform:"uppercase",letterSpacing:".06em"}}>{group}</div>
+              {items.map((r,i)=><div key={i} onClick={r.fn} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>e.currentTarget.style.background=C.s2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:16,flexShrink:0}}>{r.icon}</span>
+                <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:C.tx}}>{r.label}</div>{r.sub&&<div style={{fontSize:10,color:C.td}}>{r.sub}</div>}</div>
+                <span style={{fontSize:10,color:C.td}}>{r.type==="action"?"↵":r.type==="nav"?"→":"↗"}</span>
+              </div>)}
+            </div>);
+          })()}
+        </div>
+        <div style={{padding:"8px 16px",borderTop:`1px solid ${C.b}`,display:"flex",gap:12,justifyContent:"center"}}>
+          {[{k:"↵",l:"Abrir"},{k:"↑↓",l:"Navegar"},{k:"esc",l:"Cerrar"}].map(h=><span key={h.k} style={{fontSize:10,color:C.td}}><span style={{padding:"1px 4px",border:`1px solid ${C.b}`,borderRadius:3,marginRight:3,fontSize:9}}>{h.k}</span>{h.l}</span>)}
+        </div>
+      </div>
+    </div>}
+
+    {/* QUICK ACTIONS FAB */}
+    {user?.role==="master"&&<div style={{position:"fixed",bottom:24,right:24,zIndex:1500}}>
+      {fabOpen&&<div style={{position:"absolute",bottom:56,right:0,display:"flex",flexDirection:"column",gap:6,animation:"fadeUp .2s ease"}}>
+        {[
+          {icon:"📋",label:"Nueva tarea",fn:()=>{setFabOpen(false);setModal({type:"add_todo_global",defaults:{}})}},
+          {icon:"🎯",label:"Nuevo prospecto",fn:()=>{setFabOpen(false);setModal("add_prospect")}},
+          {icon:"💼",label:"Nuevo cliente",fn:()=>{setFabOpen(false);setModal("add_client")}},
+          {icon:"⌘K",label:"Buscar",fn:()=>{setFabOpen(false);setCmdOpen(true);setCmdQuery("")}},
+        ].map((a,i)=><div key={i} onClick={a.fn} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",background:`linear-gradient(145deg,${C.s},${C.bg})`,border:`1px solid ${C.b}`,borderRadius:10,cursor:"pointer",whiteSpace:"nowrap",backdropFilter:"blur(12px)",boxShadow:"0 4px 15px rgba(0,0,0,.3)"}} onMouseEnter={e=>e.currentTarget.style.borderColor=C.acc} onMouseLeave={e=>e.currentTarget.style.borderColor=C.b}>
+          <span style={{fontSize:14}}>{a.icon}</span><span style={{fontSize:12,fontWeight:500,color:C.tx,fontFamily:F}}>{a.label}</span>
+        </div>)}
+      </div>}
+      <button onClick={()=>setFabOpen(!fabOpen)} style={{width:48,height:48,borderRadius:14,background:`linear-gradient(135deg,${C.acc},#D4A00E)`,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,boxShadow:`0 6px 20px rgba(248,186,16,.3)`,transition:"all .3s",transform:fabOpen?"rotate(45deg)":""}}>+</button>
+    </div>}
+
   </div>;
 }
 
