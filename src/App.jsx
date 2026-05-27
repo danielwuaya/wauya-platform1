@@ -29,6 +29,11 @@ const TSTAT=[{value:"pendiente",label:"Pendiente",color:"#6B7280"},{value:"en_pr
 const CATS=[{value:"cliente",label:"Cliente",color:"#60A5FA",icon:"💼"},{value:"propuesta",label:"Propuesta",color:"#F59E0B",icon:"📄"},{value:"interno",label:"Interno",color:"#A78BFA",icon:"🏠"}];
 const PROJ_TYPES=[{value:"",label:"— Sin tipo —"},{value:"propuesta_visual",label:"Propuesta Visual"},{value:"website",label:"Website"},{value:"branding",label:"Branding"},{value:"catalogo",label:"Catálogo"},{value:"social_media",label:"Social Media"},{value:"video",label:"Video/Producción"},{value:"otro",label:"Otro"}];
 const BILL_STATUS=[{value:"activo",label:"Activo",color:"#34D399"},{value:"por_cobrar",label:"Por Cobrar",color:"#F59E0B"},{value:"vencido",label:"Vencido",color:"#FF4D6A"},{value:"pausado",label:"Pausado",color:"#6B7280"}];
+const PLANS=[
+  {value:"basico",label:"Básico",color:"#6B7280",icon:"🟢",reels:0,desc:"Manejo de redes sociales sin reels producidos"},
+  {value:"esencial",label:"Esencial",color:"#F59E0B",icon:"🟡",reels:2,desc:"Redes sociales + 2 reels producidos"},
+  {value:"pro",label:"Pro",color:"#8B5CF6",icon:"🔵",reels:4,desc:"Redes sociales + 4 reels producidos"}
+];
 const todayStr=()=>new Date().toISOString().split("T")[0];
 const F="'Poppins',sans-serif",D="'Playfair Display',serif";
 const C={bg:"#060B18",s:"#0A1428",s2:"#0F1D38",b:"#1A2D52",tx:"#F0F0F4",tm:"#8A94A8",td:"#4A5568",acc:"#F8BA10",accD:"#D4A00E",r:"#FF4D6A",rBg:"#1A0810",g:"#36DE67",w:"#FFC107",p:"#4A90D9",pBg:"#0A1428",bl:"#60A5FA",blBg:"#0A1633"};
@@ -78,7 +83,7 @@ function AppInner(){
   const[credForm,setCredForm]=useState({platform:"instagram",username:"",password:"",url:"",notes:""});
   const[showPwMap,setShowPwMap]=useState({});const[calComment,setCalComment]=useState("");const[brandComment,setBrandComment]=useState("");
   const[cmdOpen,setCmdOpen]=useState(false);const[cmdQuery,setCmdQuery]=useState("");const[fabOpen,setFabOpen]=useState(false);
-  const[deliveries,setDeliveries]=useState([]);
+  const[deliveries,setDeliveries]=useState([]);const[clientExtras,setClientExtras]=useState([]);
 
   const safeQuery=async(table,opts={})=>{try{let q=supabase.from(table).select("*");if(opts.order)q=q.order(opts.order,{ascending:opts.asc??false});if(opts.limit)q=q.limit(opts.limit);const{data}=await q;return data||[]}catch{return[]}};
   const loadAll=useCallback(async()=>{
@@ -93,6 +98,7 @@ function AppInner(){
     setTemplates(await safeQuery("task_templates",{order:"name",asc:true}));
     setAL(await safeQuery("activity_log",{order:"created_at",limit:50}));
     setDeliveries(await safeQuery("deliveries",{order:"created_at"}));
+    setClientExtras(await safeQuery("client_extras",{order:"created_at"}));
   },[]);
   useEffect(()=>{
     // Global error handler - prevents white screen
@@ -171,17 +177,17 @@ function AppInner(){
 
   const prospFiles=pid=>files.filter(f=>f.owner_type==="prospect"&&f.owner_id===pid);
   const clientFiles=cid=>files.filter(f=>f.owner_type==="client"&&f.owner_id===cid);
-  const totalRevenue=clients.reduce((s,c)=>s+(parseFloat(c.monthly_fee)||0),0);
+  const totalRevenue=clients.reduce((s,c)=>s+(parseFloat(c.monthly_fee)||0),0)+clientExtras.filter(e=>e.status==="activo").reduce((s,e)=>s+(parseFloat(e.price)||0),0);
   const totalHours=timeEntries.reduce((s,t)=>s+(parseFloat(t.hours)||0),0);
 
   // PROFITABILITY per client
   const clientProfit=useMemo(()=>clients.map(cl=>{
     const hours=timeEntries.filter(t=>t.client_id===cl.id).reduce((s,t)=>s+(parseFloat(t.hours)||0),0);
     const cost=timeEntries.filter(t=>t.client_id===cl.id).reduce((s,t)=>{const emp=employees.find(e=>e.id===t.employee_id);return s+((parseFloat(t.hours)||0)*(parseFloat(emp?.hourly_rate)||0))},0);
-    const revenue=parseFloat(cl.monthly_fee)||0;
+    const revenue=(parseFloat(cl.monthly_fee)||0)+clientExtras.filter(e=>e.client_id===cl.id&&e.status==="activo").reduce((s,e)=>s+(parseFloat(e.price)||0),0);
     const margin=revenue>0?Math.round(((revenue-cost)/revenue)*100):0;
     return{...cl,hours,cost,revenue,margin};
-  }),[clients,timeEntries,employees]);
+  }),[clients,timeEntries,employees,clientExtras]);
 
   const stats=useMemo(()=>{const tt=todos.length,ct=todos.filter(x=>x.status==="completado").length,pt=todos.filter(x=>x.status==="pendiente").length,ip=todos.filter(x=>x.status==="en_progreso").length;const sc=STATUS_OPTS.map(s=>({...s,count:clients.filter(x=>x.status===s.value).length}));const el=employees.map(e=>({...e,tc:todos.filter(td=>td.assigned_to===e.id&&td.status!=="completado").length,hrs:timeEntries.filter(t=>t.employee_id===e.id).reduce((s,t)=>s+(parseFloat(t.hours)||0),0)}));return{tt,ct,pt,ip,sc,el}},[todos,clients,employees,timeEntries]);
 
@@ -336,8 +342,44 @@ function AppInner(){
           {cl.calendar_status==="aprobado"&&<p style={{fontSize:12,color:C.g,marginTop:10}}>✅ Calendario aprobado el {cl.calendar_approved_at?new Date(cl.calendar_approved_at).toLocaleDateString("es"):""}</p>}
         </Card>}
 
-        {/* KPIs */}
-        {cl.sheet_id&&<Card style={{marginBottom:20}}><KPIDashboard sheetId={cl.sheet_id} readOnly/></Card>}
+        {/* PLAN INFO */}
+        <Card style={{marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:20}}>{(PLANS.find(p=>p.value===(cl.plan||"basico"))||PLANS[0]).icon}</span>
+              <div>
+                <div style={{fontFamily:D,fontSize:15,fontWeight:700,color:C.tx}}>Plan {(PLANS.find(p=>p.value===(cl.plan||"basico"))||PLANS[0]).label}</div>
+                <div style={{fontSize:11,color:C.td,marginTop:1}}>{(PLANS.find(p=>p.value===(cl.plan||"basico"))||PLANS[0]).desc}</div>
+              </div>
+            </div>
+            {cl.has_ads&&<Badge label="📊 Ads activo" color={C.acc}/>}
+          </div>
+          {(()=>{const extras=clientExtras.filter(e=>e.client_id===cl.id&&e.status==="activo");if(!extras.length)return null;return<div style={{marginTop:12,borderTop:`1px solid ${C.b}`,paddingTop:10}}>
+            <div style={{fontSize:10,fontWeight:600,color:C.acc,marginBottom:6}}>Extras contratados:</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{extras.map(ex=><span key={ex.id} style={{fontSize:11,padding:"4px 10px",borderRadius:8,background:C.bg,border:`1px solid ${C.b}`,color:C.tx}}>✓ {ex.name}</span>)}</div>
+          </div>})()}
+        </Card>
+
+        {/* KPIs - ONLY if client has Ads package */}
+        {cl.has_ads&&cl.sheet_id?<Card style={{marginBottom:20}}><KPIDashboard sheetId={cl.sheet_id} readOnly/></Card>
+        :!cl.has_ads?<Card style={{marginBottom:20}}>
+          <div style={{textAlign:"center",padding:"28px 20px"}}>
+            <div style={{fontSize:40,marginBottom:10,opacity:.6}}>📊</div>
+            <div style={{fontFamily:D,fontSize:16,fontWeight:700,color:C.tx,marginBottom:6}}>Métricas y KPIs</div>
+            <div style={{fontSize:13,color:C.tm,lineHeight:1.7,maxWidth:400,margin:"0 auto",marginBottom:16}}>
+              Desbloquea el dashboard de métricas de rendimiento, alcance, engagement y conversiones con el <strong style={{color:C.acc}}>Paquete de Ads</strong> de Wuaya.
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,maxWidth:320,margin:"0 auto",marginBottom:16,textAlign:"left"}}>
+              {["📈 Métricas de rendimiento en tiempo real","🎯 Tracking de conversiones y leads","📊 Dashboard personalizado de tu marca","📋 Reportes mensuales automatizados"].map((f,i)=>
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.td}}><span style={{color:C.acc}}>✓</span>{f}</div>
+              )}
+            </div>
+            <div style={{background:`linear-gradient(135deg,${C.acc}15,${C.acc}05)`,border:`1px solid ${C.acc}30`,borderRadius:12,padding:"14px 20px",display:"inline-block"}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.acc,marginBottom:4}}>¿Interesado en potenciar tus resultados?</div>
+              <div style={{fontSize:11,color:C.tm}}>Contacta a tu equipo de Wuaya para activar el paquete de Ads y desbloquear esta función.</div>
+            </div>
+          </div>
+        </Card>:null}
 
         {/* CREDENTIALS VAULT */}
         <Card style={{marginBottom:20}}>
@@ -440,7 +482,7 @@ function AppInner(){
       </div>}
 
       {/* CLIENTS LIST */}
-      {view==="clients"&&!selId&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Clientes</h1><Btn onClick={()=>setModal("add_client")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div><div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>{filt(clients).length===0?<Empty icon="💼" title="Sin clientes" sub="Convierte un prospecto o crea un cliente directo" action={()=>setModal("add_client")} actionLabel="+ Nuevo cliente"/>:<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>{filt(clients).map(cl=>{const cp=clientProfit.find(x=>x.id===cl.id);return<Card key={cl.id} hover onClick={()=>setSelId(cl.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{cl.company||cl.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{cl.name}</div></div><div style={{display:"flex",gap:6,alignItems:"flex-start"}}>{(()=>{const hs=getHealthScore(cl);return<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:getHealthColor(hs)+"18",color:getHealthColor(hs)}}>{hs}</span>})()}<SBadge status={cl.status}/></div></div>{cl.services&&<div style={{fontSize:11,color:C.td,marginBottom:6}}>🎯 {cl.services}</div>}<div style={{display:"flex",gap:10,fontSize:10,color:C.td,flexWrap:"wrap"}}><span><Ic n="todo" sz={11}/>{todos.filter(td=>td.client_id===cl.id).length}</span>{cl.monthly_fee>0&&<span style={{color:C.g}}>💰${cl.monthly_fee}/mes</span>}{cp&&cp.hours>0&&<span style={{color:C.bl}}>⏱{cp.hours.toFixed(1)}h</span>}</div></Card>})}</div>}</div>}
+      {view==="clients"&&!selId&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Clientes</h1><Btn onClick={()=>setModal("add_client")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div><div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>{filt(clients).length===0?<Empty icon="💼" title="Sin clientes" sub="Convierte un prospecto o crea un cliente directo" action={()=>setModal("add_client")} actionLabel="+ Nuevo cliente"/>:<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>{filt(clients).map(cl=>{const cp=clientProfit.find(x=>x.id===cl.id);return<Card key={cl.id} hover onClick={()=>setSelId(cl.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{cl.company||cl.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{cl.name}</div></div><div style={{display:"flex",gap:6,alignItems:"flex-start"}}>{(()=>{const hs=getHealthScore(cl);return<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:getHealthColor(hs)+"18",color:getHealthColor(hs)}}>{hs}</span>})()}<SBadge status={cl.status}/></div></div>{cl.services&&<div style={{fontSize:11,color:C.td,marginBottom:6}}>🎯 {cl.services}</div>}<div style={{display:"flex",gap:10,fontSize:10,color:C.td,flexWrap:"wrap"}}><span><Ic n="todo" sz={11}/>{todos.filter(td=>td.client_id===cl.id).length}</span>{cl.monthly_fee>0&&<span style={{color:C.g}}>💰${cl.monthly_fee}/mes</span>}{(()=>{const pl=PLANS.find(p=>p.value===(cl.plan||"basico"))||PLANS[0];return<span style={{color:pl.color}}>{pl.icon} {pl.label}</span>})()}{cl.has_ads&&<span style={{color:C.acc}}>📊 Ads</span>}{(()=>{const exCnt=clientExtras.filter(e=>e.client_id===cl.id&&e.status==="activo").length;return exCnt>0?<span style={{color:C.p}}>🛒 {exCnt} extra{exCnt>1?"s":""}</span>:null})()}{cp&&cp.hours>0&&<span style={{color:C.bl}}>⏱{cp.hours.toFixed(1)}h</span>}</div></Card>})}</div>}</div>}
 
       {/* CLIENT DETAIL with templates + time */}
       {view==="clients"&&selId&&sc&&<div>
@@ -453,6 +495,50 @@ function AppInner(){
           <Card><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:10}}>Notas</h3><textarea value={sc.notes||""} onChange={e=>{const v=e.target.value;setClients(cl=>cl.map(x=>x.id===sc.id?{...x,notes:v}:x));autoSave("clients",sc.id,{notes:v})}} placeholder="Notas..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:8,padding:8,color:C.tx,fontSize:12,fontFamily:F,outline:"none",resize:"vertical",minHeight:70}}/></Card>
         </div>
         {/* BILLING */}
+        {/* PLAN + ADS */}
+        <Card style={{marginBottom:20}}>
+          <h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:12}}>📦 Plan del cliente</h3>
+          <div style={{display:"flex",gap:6,marginBottom:14}}>{PLANS.map(pl=><button key={pl.value} onClick={()=>{updClient(sc.id,{plan:pl.value,reels_included:pl.reels});showToast("Plan actualizado a "+pl.label)}} style={{flex:1,padding:"10px 8px",borderRadius:10,border:`1px solid ${(sc.plan||"basico")===pl.value?pl.color:C.b}`,background:(sc.plan||"basico")===pl.value?pl.color+"15":"transparent",cursor:"pointer",textAlign:"center",transition:"all .2s"}}><div style={{fontSize:16,marginBottom:2}}>{pl.icon}</div><div style={{fontSize:12,fontWeight:700,color:(sc.plan||"basico")===pl.value?pl.color:C.tm,fontFamily:F}}>{pl.label}</div><div style={{fontSize:9,color:C.td,marginTop:2}}>{pl.desc}</div></button>)}</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",background:C.bg,borderRadius:10,border:`1px solid ${sc.has_ads?C.acc:C.b}`}}>
+            <div><div style={{fontSize:13,fontWeight:600,color:C.tx}}>📊 Paquete de Ads</div><div style={{fontSize:10,color:C.td,marginTop:2}}>Desbloquea KPIs y métricas de rendimiento en el portal del cliente</div></div>
+            <button onClick={()=>{updClient(sc.id,{has_ads:!sc.has_ads});showToast(sc.has_ads?"Ads desactivado":"Ads activado")}} style={{width:48,height:26,borderRadius:13,background:sc.has_ads?C.acc:C.b,border:"none",cursor:"pointer",position:"relative",transition:"all .3s"}}><div style={{width:20,height:20,borderRadius:10,background:"#fff",position:"absolute",top:3,left:sc.has_ads?25:3,transition:"all .3s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/></button>
+          </div>
+        </Card>
+        {/* EXTRAS / ADD-ONS */}
+        <Card style={{marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>🛒 Extras contratados</h3>
+            <Btn onClick={()=>setModal({type:"add_extra",clientId:sc.id})} v="secondary" sz="sm" icon="plus">Agregar</Btn>
+          </div>
+          {(()=>{const extras=clientExtras.filter(e=>e.client_id===sc.id);const totalExtras=extras.filter(e=>e.status==="activo").reduce((s,e)=>s+(parseFloat(e.price)||0),0);
+            return<>
+              {extras.length===0?<p style={{fontSize:11,color:C.td}}>Sin extras — agrega servicios adicionales como Branding, Sales Deck, Website, etc.</p>
+              :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {extras.map(ex=>{const stColor=ex.status==="activo"?C.g:ex.status==="completado"?C.bl:C.td;return<div key={ex.id} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:C.bg,borderRadius:10,border:`1px solid ${C.b}`}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:12,fontWeight:600,color:C.tx}}>{ex.name}</span>
+                      <Badge label={ex.status} color={stColor}/>
+                    </div>
+                    {ex.notes&&<div style={{fontSize:10,color:C.td,marginTop:2}}>📝 {ex.notes}</div>}
+                  </div>
+                  <span style={{fontSize:14,fontWeight:700,color:C.acc,fontFamily:D}}>${parseFloat(ex.price||0).toLocaleString()}</span>
+                  <select value={ex.status} onChange={async e=>{try{await supabase.from("client_extras").update({status:e.target.value}).eq("id",ex.id);await loadAll();showToast("Estado actualizado")}catch{}}} style={{background:C.s2,border:`1px solid ${C.b}`,borderRadius:6,padding:"3px 6px",color:C.tm,fontSize:10,fontFamily:F,outline:"none",cursor:"pointer"}}>
+                    <option value="activo">Activo</option>
+                    <option value="completado">Completado</option>
+                    <option value="pausado">Pausado</option>
+                  </select>
+                  <Btn onClick={()=>setModal({type:"edit_extra",extra:ex})} v="ghost" sz="sm" icon="edit"/>
+                  <button onClick={async()=>{if(!confirm("¿Eliminar extra?"))return;try{await supabase.from("client_extras").delete().eq("id",ex.id);await loadAll();showToast("Extra eliminado")}catch{}}} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:3}}><Ic n="tr" sz={13}/></button>
+                </div>})}
+                {totalExtras>0&&<div style={{display:"flex",justifyContent:"flex-end",padding:"8px 12px",borderTop:`1px solid ${C.b}`}}>
+                  <span style={{fontSize:12,color:C.tm}}>Total extras activos: </span>
+                  <span style={{fontSize:14,fontWeight:800,color:C.acc,fontFamily:D,marginLeft:6}}>${totalExtras.toLocaleString()}</span>
+                </div>}
+              </div>}
+            </>;
+          })()}
+        </Card>
         <Card style={{marginBottom:20}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx,marginBottom:10}}><Ic n="dollar" sz={14}/> Facturación</h3><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}><div><label style={{fontSize:10,color:C.tm}}>Fee mensual ($)</label><input type="number" value={sc.monthly_fee||0} onChange={e=>{const v=e.target.value;setClients(cl=>cl.map(x=>x.id===sc.id?{...x,monthly_fee:v}:x));autoSave("clients",sc.id,{monthly_fee:parseFloat(v)||0})}} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",marginTop:4}}/></div><div><label style={{fontSize:10,color:C.tm}}>Día de cobro</label><input type="number" min="1" max="31" value={sc.billing_day||1} onChange={e=>{const v=e.target.value;setClients(cl=>cl.map(x=>x.id===sc.id?{...x,billing_day:v}:x));autoSave("clients",sc.id,{billing_day:parseInt(v)||1})}} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",marginTop:4}}/></div><div><label style={{fontSize:10,color:C.tm}}>Estado</label><select value={sc.billing_status||"activo"} onChange={e=>{updClient(sc.id,{billing_status:e.target.value});showToast("Estado de cobro actualizado")}} style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:6,padding:"6px 8px",color:C.tx,fontSize:12,fontFamily:F,outline:"none",marginTop:4}}>{BILL_STATUS.map(b=><option key={b.value} value={b.value}>{b.label}</option>)}</select></div></div></Card>
         {/* BRAND APPROVAL CONTROL */}
         <Card style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><h3 style={{fontFamily:D,fontSize:13,fontWeight:600,color:C.tx}}>🎨 Línea gráfica</h3><div style={{display:"flex",gap:6}}>{["pendiente","en_revision","aprobado"].map(st=><button key={st} onClick={()=>{updClient(sc.id,{brand_status:st});showToast("Estado actualizado")}} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${sc.brand_status===st?C.acc:C.b}`,background:sc.brand_status===st?C.acc+"15":"transparent",color:sc.brand_status===st?C.acc:C.td,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:F}}>{st==="pendiente"?"⏳ Pendiente":st==="en_revision"?"👁️ En revisión":"✅ Aprobada"}</button>)}</div></div>{sc.brand_status==="cambios"&&<div style={{background:C.bg,borderRadius:8,padding:10,border:`1px solid ${C.w}30`}}><div style={{fontSize:10,fontWeight:600,color:C.w,marginBottom:4}}>Cliente pidió cambios:</div><div style={{fontSize:12,color:C.tm}}>{sc.brand_comment||"Sin comentario"}</div></div>}</Card>
@@ -537,6 +623,8 @@ function AppInner(){
     {modal?.type==="edit_user"&&<Mod title="Editar Usuario" onClose={()=>setModal(null)}><FEditUser user={modal.user} table={modal.table} onDone={async upd=>{await dbUpd(modal.table,modal.user.id,upd);setModal(null)}} onX={()=>setModal(null)}/></Mod>}
     {modal?.type==="onboarding"&&<Mod title="Onboarding — Nuevo Cliente" onClose={()=>setModal(null)} w={640}><FOnboarding prospect={modal.prospect} onDone={(id,data)=>convertProspect(id,data)} onX={()=>setModal(null)}/></Mod>}
     {modal?.type==="dup_period"&&<Mod title="Duplicar periodo de tareas" onClose={()=>setModal(null)} w={560}><FDupPeriod todos={todos} clients={clients} prospects={prospects} onDuplicate={dupPeriod} onX={()=>setModal(null)}/></Mod>}
+    {modal?.type==="add_extra"&&<Mod title="Agregar extra" onClose={()=>setModal(null)} w={440}><FExtra clientId={modal.clientId} onDone={async(data)=>{try{await supabase.from("client_extras").insert(data);await loadAll();setModal(null);showToast("Extra agregado")}catch(e){showToast("Error: "+e.message,"error")}}} onX={()=>setModal(null)}/></Mod>}
+    {modal?.type==="edit_extra"&&<Mod title="Editar extra" onClose={()=>setModal(null)} w={440}><FExtra init={modal.extra} clientId={modal.extra.client_id} isEdit onDone={async(data)=>{try{await supabase.from("client_extras").update(data).eq("id",modal.extra.id);await loadAll();setModal(null);showToast("Extra actualizado")}catch(e){showToast("Error: "+e.message,"error")}}} onX={()=>setModal(null)}/></Mod>}
 
     {/* COMMAND PALETTE (Cmd+K) */}
     {cmdOpen&&user?.role==="master"&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:3000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"15vh",backdropFilter:"blur(8px)"}} onClick={e=>{if(e.target===e.currentTarget)setCmdOpen(false)}}>
@@ -787,5 +875,34 @@ function ClientCreds({clientId}){
         <button onClick={()=>deleteCred(cr.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.r,padding:3,fontSize:10}} title="Eliminar">🗑️</button>
       </div>;
     })}</div>
+  </div>;
+}
+
+// ─── EXTRA / ADD-ON FORM ───
+function FExtra({clientId,onDone,onX,init,isEdit}){
+  const SUGGESTIONS=["Branding completo","Sales Deck","Diseño de logo","Website","Landing page","Catálogo digital","Sesión de fotos","Producción de video","Email marketing","Reel adicional","Story Highlight Covers","Diseño de menú","Papelería corporativa","Otro"];
+  const[f,setF]=useState(init?{name:init.name||"",price:init.price||0,status:init.status||"activo",notes:init.notes||""}:{name:"",price:0,status:"activo",notes:""});
+  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{fontSize:11,color:C.td,marginBottom:2}}>Selecciona o escribe el servicio extra:</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:4}}>
+      {SUGGESTIONS.filter(sg=>!f.name||sg.toLowerCase().includes(f.name.toLowerCase())).slice(0,8).map(sg=>
+        <button key={sg} onClick={()=>{if(sg!=="Otro")setF({...f,name:sg})}} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${f.name===sg?C.acc:C.b}`,background:f.name===sg?C.acc+"15":"transparent",color:f.name===sg?C.acc:C.tm,fontSize:11,cursor:"pointer",fontFamily:F}}>{sg}</button>
+      )}
+    </div>
+    <Inp label="Nombre del servicio" value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="Ej: Branding completo"/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Inp label="Precio ($)" type="number" value={f.price} onChange={e=>setF({...f,price:e.target.value})} placeholder="500"/>
+      <Sel label="Estado" value={f.status} onChange={e=>setF({...f,status:e.target.value})} options={[{value:"activo",label:"Activo"},{value:"completado",label:"Completado"},{value:"pausado",label:"Pausado"}]}/>
+    </div>
+    <Inp label="Notas (opcional)" value={f.notes} onChange={e=>setF({...f,notes:e.target.value})} placeholder="Detalles, alcance, etc."/>
+    {f.name&&f.price>0&&<div style={{background:C.bg,borderRadius:8,padding:10,border:`1px solid ${C.b}`}}>
+      <span style={{fontSize:11,color:C.tm}}>Resumen: </span>
+      <span style={{fontSize:13,fontWeight:700,color:C.acc}}>{f.name}</span>
+      <span style={{fontSize:13,color:C.tx}}> — ${parseFloat(f.price||0).toLocaleString()}</span>
+    </div>}
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+      <Btn onClick={onX} v="ghost">Cancelar</Btn>
+      <Btn onClick={()=>{if(!f.name)return;onDone({client_id:clientId,name:f.name,price:parseFloat(f.price)||0,status:f.status,notes:f.notes})}} disabled={!f.name}>{isEdit?"Guardar":"Agregar"}</Btn>
+    </div>
   </div>;
 }
