@@ -117,8 +117,8 @@ function Sel({label,options,...p}){return<div style={{display:"flex",flexDirecti
 function Card({children,style:sx,onClick}){return<div onClick={onClick} style={{background:`${C.s}e8`,borderRadius:14,border:`1px solid ${C.b}80`,padding:20,cursor:onClick?"pointer":"default",transition:"all .2s",...sx}}>{children}</div>}
 function Badge({label,color}){return<span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:8,background:color+"18",color}}>{label}</span>}
 
-export default function MyCargo({ toast }) {
-  const [tab, setTab] = useState("dashboard");
+export default function MyCargo({ toast, restricted = false }) {
+  const [tab, setTab] = useState(restricted ? "packages" : "dashboard");
   const [clients, setClients] = useState([]);
   const [packages, setPackages] = useState([]);
   const [manifests, setManifests] = useState([]);
@@ -242,13 +242,13 @@ export default function MyCargo({ toast }) {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20, padding: 4, background: C.s2, borderRadius: 12, border: `1px solid ${C.b}60` }}>
-        {[{ k: "dashboard", l: "Dashboard" }, { k: "packages", l: "Paquetes" }, { k: "clients", l: "Clientes" }, { k: "manifests", l: "Manifiestos" }].map(t => (
+        {(restricted ? [{ k: "packages", l: "Paquetes" }, { k: "clients", l: "Clientes" }, { k: "manifests", l: "Manifiestos" }] : [{ k: "dashboard", l: "Dashboard" }, { k: "packages", l: "Paquetes" }, { k: "clients", l: "Clientes" }, { k: "manifests", l: "Manifiestos" }]).map(t => (
           <button key={t.k} onClick={() => { setTab(t.k); setSelClient(null); }} style={{ flex: 1, padding: "8px 16px", borderRadius: 10, border: "none", background: tab === t.k ? C.acc : "transparent", color: tab === t.k ? "#060B18" : C.tm, fontSize: 12, fontWeight: tab === t.k ? 700 : 500, cursor: "pointer", fontFamily: F, transition: "all .2s" }}>{t.l}</button>
         ))}
       </div>
 
-      {/* DASHBOARD */}
-      {tab === "dashboard" && <>
+      {/* DASHBOARD (solo gerente) */}
+      {tab === "dashboard" && !restricted && <>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
           <Stat label="Paquetes totales" value={stats.totalPkgs} icon="📦" color={C.acc} />
           <Stat label="Esta semana" value={stats.weekPkgs} icon="📅" color={C.bl} sub={"$" + stats.weekRevenue.toFixed(2)} />
