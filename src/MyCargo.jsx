@@ -48,6 +48,41 @@ function calcShipping(pkg) {
   return arancel;
 }
 
+// GOOGLE DRIVE — carpeta madre MY CARGO (pega tu link aquí)
+const DRIVE_ROOT_URL = "https://drive.google.com/drive/folders/PENDIENTE";
+
+// Genera el nombre exacto de carpeta para un cliente
+function clientFolderName(cl) {
+  const name = `${cl.first_name} ${cl.last_name}`.trim().toUpperCase();
+  return cl.cedula ? `${name} - ${cl.cedula}` : name;
+}
+
+// Exporta los paquetes de un cliente a CSV (para respaldo en Drive)
+function exportClientCSV(cl, pkgs) {
+  const rows = [["MY CARGO — RESPALDO DE CLIENTE"]];
+  rows.push([clientFolderName(cl)]);
+  rows.push([`Cédula: ${cl.cedula}`, `Teléfono: ${cl.phone}`, `Email: ${cl.email}`]);
+  rows.push([`Dirección: ${cl.address} ${cl.city}`]);
+  rows.push([]);
+  rows.push(["Tracking", "Descripción", "Peso (lb)", "Valor factura", "Tarifa", "Arancel", "Total", "Estado", "Fecha estimada"]);
+  const RT = { libra: "Por libra", cuatroxcuatro: "4x4", categoria_c: "Categoría C" };
+  const ST = { bodega: "Bodega", transito: "Tránsito", aduana: "Aduana", pago: "Pago", retiro: "Retiro", entregado: "Entregado" };
+  pkgs.forEach(p => rows.push([
+    p.tracking_number || "", p.description || "", p.weight || 0, p.invoice_value || 0,
+    RT[p.rate_type] || p.rate_type, p.arancel || 0, calcShipping(p).toFixed(2),
+    ST[p.status] || p.status, p.estimated_delivery || ""
+  ]));
+  const total = pkgs.reduce((s, p) => s + calcShipping(p), 0);
+  rows.push([]);
+  rows.push(["", "", "", "", "", "TOTAL:", `$${total.toFixed(2)}`]);
+  const csv = rows.map(r => r.map(c => '"' + String(c || "").replace(/"/g, '""') + '"').join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${clientFolderName(cl)}.csv`;
+  a.click();
+}
+
 function Btn({children,onClick,v="primary",sz="md",disabled,style:sx}){const b={display:"inline-flex",alignItems:"center",gap:7,border:"none",cursor:disabled?"not-allowed":"pointer",fontFamily:F,fontWeight:600,borderRadius:10,transition:"all .2s",opacity:disabled?.35:1,whiteSpace:"nowrap",fontSize:sz==="sm"?11:13,padding:sz==="sm"?"6px 12px":"9px 18px"};const vs={primary:{background:`linear-gradient(135deg,${C.acc},#D4A00E)`,color:"#060B18",boxShadow:"0 2px 8px rgba(248,186,16,.2)"},secondary:{background:C.s2,color:C.tx,border:`1px solid ${C.b}`},danger:{background:C.r+"18",color:C.r,border:`1px solid ${C.r}25`},ghost:{background:"transparent",color:C.tm}};return<button onClick={onClick} disabled={disabled} style={{...b,...vs[v],...sx}}>{children}</button>}
 function Inp({label,...p}){return<div style={{display:"flex",flexDirection:"column",gap:6}}>{label&&<label style={{fontSize:11,fontWeight:600,color:C.tm,fontFamily:F}}>{label}</label>}<input {...p} style={{background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"10px 14px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",width:"100%",...p.style}}/></div>}
 function Sel({label,options,...p}){return<div style={{display:"flex",flexDirection:"column",gap:6}}>{label&&<label style={{fontSize:11,fontWeight:600,color:C.tm,fontFamily:F}}>{label}</label>}<select {...p} style={{background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"10px 14px",color:C.tx,fontSize:13,fontFamily:F,outline:"none",cursor:"pointer",...p.style}}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></div>}
@@ -162,7 +197,10 @@ export default function MyCargo({ toast }) {
             <p style={{ fontSize: 12, color: C.td }}>Courier internacional USA → Ecuador</p>
           </div>
         </div>
-        <Btn onClick={() => setModal({ type: "warehouse" })} v="secondary" sz="sm">📍 Dirección bodega</Btn>
+        <div style={{ display: "flex", gap: 6 }}>
+          {DRIVE_ROOT_URL.indexOf("PENDIENTE") === -1 && <a href={DRIVE_ROOT_URL} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", background: C.s2, border: `1px solid ${C.b}`, borderRadius: 10, color: C.bl, fontSize: 12, fontWeight: 600, textDecoration: "none", fontFamily: F }}>📁 Drive</a>}
+          <Btn onClick={() => setModal({ type: "warehouse" })} v="secondary" sz="sm">📍 Dirección bodega</Btn>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -304,6 +342,21 @@ export default function MyCargo({ toast }) {
                 </div>
               </div>
             </Card>
+            {/* DRIVE BACKUP */}
+            <Card style={{ marginBottom: 16, background: C.blBg, border: `1px solid ${C.bl}30` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 18 }}>📁</span>
+                <div><div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Respaldo en Google Drive</div><div style={{ fontSize: 10, color: C.td }}>Crea la carpeta en Drive → CLIENTES con este nombre exacto</div></div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, marginBottom: 10 }}>
+                <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: C.bl, fontWeight: 600 }}>{clientFolderName(cl)}</span>
+                <button onClick={() => { navigator.clipboard.writeText(clientFolderName(cl)); showToast("Nombre copiado"); }} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "5px 12px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>📋 Copiar nombre</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Btn onClick={() => exportClientCSV(cl, pkgs)} v="secondary" sz="sm" disabled={pkgs.length === 0}>📥 Exportar CSV para Drive</Btn>
+                {DRIVE_ROOT_URL.indexOf("PENDIENTE") === -1 && <a href={DRIVE_ROOT_URL} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.s2, border: `1px solid ${C.b}`, borderRadius: 10, color: C.bl, fontSize: 11, fontWeight: 600, textDecoration: "none", fontFamily: F }}>📁 Abrir Drive</a>}
+              </div>
+            </Card>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h3 style={{ fontFamily: D, fontSize: 15, fontWeight: 600, color: C.tx }}>Paquetes ({pkgs.length})</h3>
               <Btn onClick={() => setModal({ type: "add_package", clientId: cl.id })} sz="sm">+ Agregar paquete</Btn>
@@ -330,6 +383,19 @@ export default function MyCargo({ toast }) {
 
       {/* MANIFESTS */}
       {tab === "manifests" && <>
+        <Card style={{ marginBottom: 16, background: C.blBg, border: `1px solid ${C.bl}30` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 18 }}>📁</span>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Estructura de respaldo en Google Drive</div>
+          </div>
+          <div style={{ fontSize: 12, color: C.tm, lineHeight: 1.9, fontFamily: "monospace", background: C.bg, padding: 14, borderRadius: 10, border: `1px solid ${C.b}` }}>
+            📁 MY CARGO<br />
+            &nbsp;&nbsp;├── 📁 CLIENTES <span style={{ color: C.td }}>(una carpeta por cliente)</span><br />
+            &nbsp;&nbsp;├── 📁 MANIFIESTOS <span style={{ color: C.td }}>(documentos de embarque)</span><br />
+            &nbsp;&nbsp;└── 📁 FACTURAS <span style={{ color: C.td }}>(facturas por cliente)</span>
+          </div>
+          <p style={{ fontSize: 11, color: C.td, marginTop: 10 }}>Crea estas 3 carpetas en Drive. La plataforma guarda todo en la nube y tú tienes el respaldo espejo. En cada cliente encuentras el nombre exacto de su carpeta y un botón para exportar su respaldo.</p>
+        </Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <p style={{ fontSize: 12, color: C.tm }}>Documento general de carga por embarque</p>
           <Btn onClick={() => setModal({ type: "add_manifest" })}>+ Nuevo manifiesto</Btn>
