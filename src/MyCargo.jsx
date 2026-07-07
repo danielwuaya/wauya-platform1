@@ -57,24 +57,52 @@ function clientFolderName(cl) {
   return cl.cedula ? `${name} - ${cl.cedula}` : name;
 }
 
-// Exporta los paquetes de un cliente a CSV (para respaldo en Drive)
+// Calcula la semana del mes (1-5) de una fecha
+function weekOfMonth(date) {
+  const d = new Date(date);
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  return Math.ceil((d.getDate() + first.getDay()) / 7);
+}
+
+// Genera el nombre de carpeta de semana: "2026-07 Semana 2"
+function weekFolderName(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m} Semana ${weekOfMonth(date)}`;
+}
+
+// Exporta los paquetes de un cliente a CSV (para respaldo en Drive), organizado por semana
 function exportClientCSV(cl, pkgs) {
   const rows = [["MY CARGO — RESPALDO DE CLIENTE"]];
   rows.push([clientFolderName(cl)]);
   rows.push([`Cédula: ${cl.cedula}`, `Teléfono: ${cl.phone}`, `Email: ${cl.email}`]);
   rows.push([`Dirección: ${cl.address} ${cl.city}`]);
   rows.push([]);
-  rows.push(["Tracking", "Descripción", "Peso (lb)", "Valor factura", "Tarifa", "Arancel", "Total", "Estado", "Fecha estimada"]);
   const RT = { libra: "Por libra", cuatroxcuatro: "4x4", categoria_c: "Categoría C" };
   const ST = { bodega: "Bodega", transito: "Tránsito", aduana: "Aduana", pago: "Pago", retiro: "Retiro", entregado: "Entregado" };
-  pkgs.forEach(p => rows.push([
-    p.tracking_number || "", p.description || "", p.weight || 0, p.invoice_value || 0,
-    RT[p.rate_type] || p.rate_type, p.arancel || 0, calcShipping(p).toFixed(2),
-    ST[p.status] || p.status, p.estimated_delivery || ""
-  ]));
+  // Agrupa por semana
+  const byWeek = {};
+  pkgs.forEach(p => {
+    const wk = weekFolderName(p.created_at);
+    if (!byWeek[wk]) byWeek[wk] = [];
+    byWeek[wk].push(p);
+  });
+  const header = ["Tracking", "Descripción", "Peso (lb)", "Valor factura", "Tarifa", "Arancel", "Total", "Estado", "Fecha estimada"];
+  Object.keys(byWeek).sort().forEach(wk => {
+    rows.push([wk]);
+    rows.push(header);
+    byWeek[wk].forEach(p => rows.push([
+      p.tracking_number || "", p.description || "", p.weight || 0, p.invoice_value || 0,
+      RT[p.rate_type] || p.rate_type, p.arancel || 0, calcShipping(p).toFixed(2),
+      ST[p.status] || p.status, p.estimated_delivery || ""
+    ]));
+    const wkTotal = byWeek[wk].reduce((s, p) => s + calcShipping(p), 0);
+    rows.push(["", "", "", "", "", "Subtotal:", `$${wkTotal.toFixed(2)}`]);
+    rows.push([]);
+  });
   const total = pkgs.reduce((s, p) => s + calcShipping(p), 0);
-  rows.push([]);
-  rows.push(["", "", "", "", "", "TOTAL:", `$${total.toFixed(2)}`]);
+  rows.push(["", "", "", "", "", "TOTAL GENERAL:", `$${total.toFixed(2)}`]);
   const csv = rows.map(r => r.map(c => '"' + String(c || "").replace(/"/g, '""') + '"').join(",")).join("\n");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
@@ -346,14 +374,22 @@ export default function MyCargo({ toast }) {
             <Card style={{ marginBottom: 16, background: C.blBg, border: `1px solid ${C.bl}30` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                 <span style={{ fontSize: 18 }}>📁</span>
-                <div><div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Respaldo en Google Drive</div><div style={{ fontSize: 10, color: C.td }}>Crea la carpeta en Drive → CLIENTES con este nombre exacto</div></div>
+                <div><div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Respaldo en Google Drive</div><div style={{ fontSize: 10, color: C.td }}>Carpeta del cliente → subcarpeta por semana</div></div>
               </div>
+              {/* Client folder */}
+              <div style={{ fontSize: 10, fontWeight: 600, color: C.tm, marginBottom: 4 }}>1. Carpeta del cliente (en CLIENTES):</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, marginBottom: 10 }}>
                 <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: C.bl, fontWeight: 600 }}>{clientFolderName(cl)}</span>
-                <button onClick={() => { navigator.clipboard.writeText(clientFolderName(cl)); showToast("Nombre copiado"); }} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "5px 12px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>📋 Copiar nombre</button>
+                <button onClick={() => { navigator.clipboard.writeText(clientFolderName(cl)); showToast("Nombre copiado"); }} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "5px 12px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>📋 Copiar</button>
+              </div>
+              {/* Week folder */}
+              <div style={{ fontSize: 10, fontWeight: 600, color: C.tm, marginBottom: 4 }}>2. Subcarpeta de esta semana (dentro del cliente):</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, marginBottom: 12 }}>
+                <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: C.g, fontWeight: 600 }}>{weekFolderName(new Date())}</span>
+                <button onClick={() => { navigator.clipboard.writeText(weekFolderName(new Date())); showToast("Semana copiada"); }} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "5px 12px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>📋 Copiar</button>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Btn onClick={() => exportClientCSV(cl, pkgs)} v="secondary" sz="sm" disabled={pkgs.length === 0}>📥 Exportar CSV para Drive</Btn>
+                <Btn onClick={() => exportClientCSV(cl, pkgs)} v="secondary" sz="sm" disabled={pkgs.length === 0}>📥 Exportar CSV (por semana)</Btn>
                 {DRIVE_ROOT_URL.indexOf("PENDIENTE") === -1 && <a href={DRIVE_ROOT_URL} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.s2, border: `1px solid ${C.b}`, borderRadius: 10, color: C.bl, fontSize: 11, fontWeight: 600, textDecoration: "none", fontFamily: F }}>📁 Abrir Drive</a>}
               </div>
             </Card>
@@ -390,11 +426,14 @@ export default function MyCargo({ toast }) {
           </div>
           <div style={{ fontSize: 12, color: C.tm, lineHeight: 1.9, fontFamily: "monospace", background: C.bg, padding: 14, borderRadius: 10, border: `1px solid ${C.b}` }}>
             📁 MY CARGO<br />
-            &nbsp;&nbsp;├── 📁 CLIENTES <span style={{ color: C.td }}>(una carpeta por cliente)</span><br />
+            &nbsp;&nbsp;├── 📁 CLIENTES<br />
+            &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── 📁 RODRIGO WITT - 1715849871<br />
+            &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── 📁 2026-07 Semana 1<br />
+            &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 📁 2026-07 Semana 2 <span style={{ color: C.td }}>(facturas + pedidos)</span><br />
             &nbsp;&nbsp;├── 📁 MANIFIESTOS <span style={{ color: C.td }}>(documentos de embarque)</span><br />
-            &nbsp;&nbsp;└── 📁 FACTURAS <span style={{ color: C.td }}>(facturas por cliente)</span>
+            &nbsp;&nbsp;└── 📁 FACTURAS <span style={{ color: C.td }}>(respaldo general)</span>
           </div>
-          <p style={{ fontSize: 11, color: C.td, marginTop: 10 }}>Crea estas 3 carpetas en Drive. La plataforma guarda todo en la nube y tú tienes el respaldo espejo. En cada cliente encuentras el nombre exacto de su carpeta y un botón para exportar su respaldo.</p>
+          <p style={{ fontSize: 11, color: C.td, marginTop: 10 }}>Cada cliente tiene su carpeta, y dentro subcarpetas por semana del mes (envíos semanales). La plataforma te da los nombres exactos con botón de copiar en cada cliente.</p>
         </Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <p style={{ fontSize: 12, color: C.tm }}>Documento general de carga por embarque</p>
