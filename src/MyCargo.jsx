@@ -163,7 +163,16 @@ export default function MyCargo({ toast }) {
   const clientTotal = (cid) => clientPkgs(cid).reduce((s, p) => s + calcShipping(p), 0);
 
   const addClient = async (data) => {
-    try { await supabase.from("cargo_clients").insert(data); await loadAll(); setModal(null); showToast("Cliente creado"); }
+    try {
+      const clean = { ...data };
+      if (clean.drive_folder_id) {
+        const m = clean.drive_folder_id.match(/folders\/([a-zA-Z0-9_-]+)/);
+        clean.drive_folder_id = m ? m[1] : clean.drive_folder_id;
+      }
+      const { error } = await supabase.from("cargo_clients").insert(clean);
+      if (error) { showToast("Error: " + error.message, "error"); return; }
+      await loadAll(); setModal(null); showToast("Cliente creado");
+    }
     catch (e) { showToast("Error: " + e.message, "error"); }
   };
   const addPackage = async (data) => {
@@ -370,28 +379,20 @@ export default function MyCargo({ toast }) {
                 </div>
               </div>
             </Card>
-            {/* DRIVE BACKUP */}
+            {/* DRIVE FILES (Drive → Plataforma) */}
             <Card style={{ marginBottom: 16, background: C.blBg, border: `1px solid ${C.bl}30` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: 18 }}>📁</span>
-                <div><div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Respaldo en Google Drive</div><div style={{ fontSize: 10, color: C.td }}>Carpeta del cliente → subcarpeta por semana</div></div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>📁</span>
+                  <div><div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Archivos en Google Drive</div><div style={{ fontSize: 10, color: C.td }}>Facturas y pedidos desde la carpeta del cliente</div></div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {cl.drive_folder_id && <a href={`https://drive.google.com/drive/folders/${cl.drive_folder_id}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.s2, border: `1px solid ${C.b}`, borderRadius: 10, color: C.bl, fontSize: 11, fontWeight: 600, textDecoration: "none", fontFamily: F }}>📁 Abrir en Drive ↗</a>}
+                  <Btn onClick={() => setModal({ type: "link_drive", clientId: cl.id, current: cl.drive_folder_id })} v="secondary" sz="sm">{cl.drive_folder_id ? "Cambiar carpeta" : "Vincular carpeta"}</Btn>
+                </div>
               </div>
-              {/* Client folder */}
-              <div style={{ fontSize: 10, fontWeight: 600, color: C.tm, marginBottom: 4 }}>1. Carpeta del cliente (en CLIENTES):</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, marginBottom: 10 }}>
-                <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: C.bl, fontWeight: 600 }}>{clientFolderName(cl)}</span>
-                <button onClick={() => { navigator.clipboard.writeText(clientFolderName(cl)); showToast("Nombre copiado"); }} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "5px 12px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>📋 Copiar</button>
-              </div>
-              {/* Week folder */}
-              <div style={{ fontSize: 10, fontWeight: 600, color: C.tm, marginBottom: 4 }}>2. Subcarpeta de esta semana (dentro del cliente):</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, marginBottom: 12 }}>
-                <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: C.g, fontWeight: 600 }}>{weekFolderName(new Date())}</span>
-                <button onClick={() => { navigator.clipboard.writeText(weekFolderName(new Date())); showToast("Semana copiada"); }} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "5px 12px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>📋 Copiar</button>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Btn onClick={() => exportClientCSV(cl, pkgs)} v="secondary" sz="sm" disabled={pkgs.length === 0}>📥 Exportar CSV (por semana)</Btn>
-                {DRIVE_ROOT_URL.indexOf("PENDIENTE") === -1 && <a href={DRIVE_ROOT_URL} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.s2, border: `1px solid ${C.b}`, borderRadius: 10, color: C.bl, fontSize: 11, fontWeight: 600, textDecoration: "none", fontFamily: F }}>📁 Abrir Drive</a>}
-              </div>
+              {cl.drive_folder_id ? <DriveViewer folderId={cl.drive_folder_id} />
+                : <p style={{ fontSize: 11, color: C.td }}>Vincula la carpeta de Drive de este cliente para ver sus facturas y pedidos aquí. Click "Vincular carpeta" y pega el link.</p>}
             </Card>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h3 style={{ fontFamily: D, fontSize: 15, fontWeight: 600, color: C.tx }}>Paquetes ({pkgs.length})</h3>
@@ -422,18 +423,14 @@ export default function MyCargo({ toast }) {
         <Card style={{ marginBottom: 16, background: C.blBg, border: `1px solid ${C.bl}30` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             <span style={{ fontSize: 18 }}>📁</span>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Estructura de respaldo en Google Drive</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>Cómo funciona con Google Drive</div>
           </div>
           <div style={{ fontSize: 12, color: C.tm, lineHeight: 1.9, fontFamily: "monospace", background: C.bg, padding: 14, borderRadius: 10, border: `1px solid ${C.b}` }}>
             📁 MY CARGO<br />
-            &nbsp;&nbsp;├── 📁 CLIENTES<br />
-            &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── 📁 RODRIGO WITT - 1715849871<br />
-            &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── 📁 2026-07 Semana 1<br />
-            &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 📁 2026-07 Semana 2 <span style={{ color: C.td }}>(facturas + pedidos)</span><br />
-            &nbsp;&nbsp;├── 📁 MANIFIESTOS <span style={{ color: C.td }}>(documentos de embarque)</span><br />
-            &nbsp;&nbsp;└── 📁 FACTURAS <span style={{ color: C.td }}>(respaldo general)</span>
+            &nbsp;&nbsp;└── 📁 CLIENTES<br />
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 📁 RODRIGO WITT <span style={{ color: C.td }}>(facturas + pedidos)</span>
           </div>
-          <p style={{ fontSize: 11, color: C.td, marginTop: 10 }}>Cada cliente tiene su carpeta, y dentro subcarpetas por semana del mes (envíos semanales). La plataforma te da los nombres exactos con botón de copiar en cada cliente.</p>
+          <p style={{ fontSize: 11, color: C.td, marginTop: 10, lineHeight: 1.7 }}>Tú creas las carpetas y subes las facturas en Drive. En cada cliente de la plataforma, pega el link de su carpeta con "Vincular carpeta" y la plataforma te muestra todos los archivos ahí mismo, sin salir. Los cambios en Drive se reflejan automáticamente al recargar.</p>
         </Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <p style={{ fontSize: 12, color: C.tm }}>Documento general de carga por embarque</p>
@@ -466,8 +463,52 @@ export default function MyCargo({ toast }) {
       {modal?.type === "add_client" && <ClientModal onClose={() => setModal(null)} onSave={addClient} />}
       {modal?.type === "add_package" && <PackageModal clients={clients} manifests={manifests} defaultClient={modal.clientId} onClose={() => setModal(null)} onSave={addPackage} showToast={showToast} />}
       {modal?.type === "add_manifest" && <ManifestModal onClose={() => setModal(null)} onSave={addManifest} showToast={showToast} />}
+      {modal?.type === "link_drive" && <LinkDriveModal current={modal.current} onClose={() => setModal(null)} onSave={async (link) => {
+        try {
+          let fid = link;
+          const m = link.match(/folders\/([a-zA-Z0-9_-]+)/);
+          if (m) fid = m[1];
+          await supabase.from("cargo_clients").update({ drive_folder_id: fid }).eq("id", modal.clientId);
+          await loadAll(); setModal(null); showToast("Carpeta vinculada");
+        } catch (e) { showToast("Error: " + e.message, "error"); }
+      }} />}
     </div>
   );
+}
+
+function DriveViewer({ folderId }) {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!folderId) { setLoading(false); return; }
+    setLoading(true); setError("");
+    fetch(`/api/drive?action=list&folderId=${folderId}`)
+      .then(r => r.json())
+      .then(d => { if (d.error) setError(d.error); else if (Array.isArray(d.files)) setFiles(d.files); else if (Array.isArray(d)) setFiles(d); setLoading(false); })
+      .catch(() => { setError("No se pudo conectar con Drive"); setLoading(false); });
+  }, [folderId]);
+  const fileIcon = (mime) => {
+    if (!mime) return "📄";
+    if (mime.includes("folder")) return "📁";
+    if (mime.includes("image")) return "🖼️";
+    if (mime.includes("pdf")) return "📕";
+    if (mime.includes("sheet") || mime.includes("excel")) return "📊";
+    if (mime.includes("document") || mime.includes("word")) return "📝";
+    return "📄";
+  };
+  if (loading) return <p style={{ fontSize: 11, color: C.acc }}>Cargando archivos de Drive...</p>;
+  if (error) return <p style={{ fontSize: 11, color: C.r }}>{error}</p>;
+  if (files.length === 0) return <p style={{ fontSize: 11, color: C.td }}>La carpeta está vacía o aún no tiene archivos.</p>;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    {files.map(f => (
+      <a key={f.id} href={f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.bg, borderRadius: 8, border: `1px solid ${C.b}60`, textDecoration: "none", fontSize: 12, transition: "all .2s" }} onMouseEnter={e => e.currentTarget.style.borderColor = C.bl + "50"} onMouseLeave={e => e.currentTarget.style.borderColor = C.b + "60"}>
+        <span style={{ fontSize: 15 }}>{fileIcon(f.mimeType)}</span>
+        <span style={{ flex: 1, color: C.tx }}>{f.name}</span>
+        <span style={{ fontSize: 10, color: C.bl }}>Abrir ↗</span>
+      </a>
+    ))}
+  </div>;
 }
 
 function Stat({ label, value, icon, color, sub }) {
@@ -511,7 +552,7 @@ Especificaciones:
 }
 
 function ClientModal({ onClose, onSave }) {
-  const [f, setF] = useState({ first_name: "", last_name: "", cedula: "", phone: "", email: "", address: "", city: "" });
+  const [f, setF] = useState({ first_name: "", last_name: "", cedula: "", phone: "", email: "", address: "", city: "", drive_folder_id: "" });
   return <ModalWrap title="Nuevo cliente My Cargo" onClose={onClose}>
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -527,6 +568,7 @@ function ClientModal({ onClose, onSave }) {
         <Inp label="Dirección de domicilio" value={f.address} onChange={e => setF({ ...f, address: e.target.value })} />
         <Inp label="Ciudad" value={f.city} onChange={e => setF({ ...f, city: e.target.value })} />
       </div>
+      <Inp label="Link de carpeta Google Drive (opcional)" value={f.drive_folder_id} onChange={e => setF({ ...f, drive_folder_id: e.target.value })} placeholder="Pega el link de la carpeta del cliente" />
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Btn onClick={onClose} v="ghost">Cancelar</Btn>
         <Btn onClick={() => { if (!f.first_name) return; onSave(f); }} disabled={!f.first_name}>Crear cliente</Btn>
@@ -646,6 +688,26 @@ function ManifestModal({ onClose, onSave, showToast }) {
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Btn onClick={onClose} v="ghost">Cancelar</Btn>
         <Btn onClick={() => { if (!f.name) return; onSave(f); }} disabled={!f.name}>Crear manifiesto</Btn>
+      </div>
+    </div>
+  </ModalWrap>;
+}
+
+function LinkDriveModal({ current, onClose, onSave }) {
+  const [link, setLink] = useState(current ? `https://drive.google.com/drive/folders/${current}` : "");
+  return <ModalWrap title="Vincular carpeta de Drive" onClose={onClose}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <p style={{ fontSize: 12, color: C.tm, lineHeight: 1.7 }}>Pega el link de la carpeta de Google Drive de este cliente. La carpeta debe estar compartida como "Cualquier persona con el enlace puede ver".</p>
+      <Inp label="Link de la carpeta" value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." />
+      <div style={{ background: C.blBg, borderRadius: 10, padding: 12, border: `1px solid ${C.bl}25`, fontSize: 11, color: C.tm, lineHeight: 1.7 }}>
+        <strong style={{ color: C.bl }}>Cómo obtener el link:</strong><br />
+        1. En Drive, click derecho sobre la carpeta del cliente<br />
+        2. "Compartir" → "Cualquier persona con el enlace"<br />
+        3. "Copiar vínculo" y pégalo aquí
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Btn onClick={onClose} v="ghost">Cancelar</Btn>
+        <Btn onClick={() => { if (link) onSave(link); }} disabled={!link}>Vincular</Btn>
       </div>
     </div>
   </ModalWrap>;
