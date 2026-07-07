@@ -660,6 +660,8 @@ function PackageModal({ clients, manifests, defaultClient, onClose, onSave, show
 function ManifestModal({ onClose, onSave, showToast }) {
   const [f, setF] = useState({ name: "", shipment_date: "", status: "abierto", document_url: "", document_name: "", notes: "" });
   const [uploading, setUploading] = useState(false);
+  const [mode, setMode] = useState("drive"); // 'drive' o 'upload'
+  const [driveLink, setDriveLink] = useState("");
   const handleUpload = async (file) => {
     if (!file) return;
     setUploading(true);
@@ -674,16 +676,36 @@ function ManifestModal({ onClose, onSave, showToast }) {
     } catch { showToast("Error", "error"); }
     setUploading(false);
   };
+  const applyDriveLink = () => {
+    if (!driveLink) return;
+    // Normalize Google Drive share links to a viewable URL
+    let url = driveLink.trim();
+    const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    const folderMatch = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (fileMatch) url = `https://drive.google.com/file/d/${fileMatch[1]}/view`;
+    else if (folderMatch) url = `https://drive.google.com/drive/folders/${folderMatch[1]}`;
+    setF(prev => ({ ...prev, document_url: url, document_name: "Documento en Drive" }));
+    showToast("Link de Drive vinculado");
+  };
   return <ModalWrap title="Nuevo manifiesto" onClose={onClose}>
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <Inp label="Nombre del embarque *" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="Ej: Embarque #12 - Junio" />
       <Inp label="Fecha de embarque" type="date" value={f.shipment_date} onChange={e => setF({ ...f, shipment_date: e.target.value })} />
+      {/* Mode toggle */}
       <div>
-        <label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Documento del manifiesto</label>
-        <div style={{ marginTop: 6 }}>
-          {f.document_url ? <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.g + "10", borderRadius: 10, border: `1px solid ${C.g}30` }}><span style={{ fontSize: 12, color: C.g }}>✓ {f.document_name}</span></div>
-            : <label style={{ display: "block", padding: "10px 14px", background: C.bg, border: `1px dashed ${C.b}`, borderRadius: 10, cursor: "pointer", fontSize: 12, color: C.tm, textAlign: "center" }}>{uploading ? "Subiendo..." : "📄 Subir manifiesto (PDF/Excel)"}<input type="file" onChange={e => handleUpload(e.target.files[0])} style={{ display: "none" }} /></label>}
+        <label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F, display: "block", marginBottom: 6 }}>Documento del manifiesto</label>
+        <div style={{ display: "flex", gap: 4, marginBottom: 10, padding: 4, background: C.s2, borderRadius: 10, border: `1px solid ${C.b}60` }}>
+          {[{ k: "drive", l: "📁 Link de Drive" }, { k: "upload", l: "📄 Subir archivo" }].map(m => (
+            <button key={m.k} onClick={() => setMode(m.k)} style={{ flex: 1, padding: "7px 12px", borderRadius: 8, border: "none", background: mode === m.k ? C.acc : "transparent", color: mode === m.k ? "#060B18" : C.tm, fontSize: 11, fontWeight: mode === m.k ? 700 : 500, cursor: "pointer", fontFamily: F, transition: "all .2s" }}>{m.l}</button>
+          ))}
         </div>
+        {f.document_url ? <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.g + "10", borderRadius: 10, border: `1px solid ${C.g}30` }}>
+          <span style={{ fontSize: 12, color: C.g, flex: 1 }}>✓ {f.document_name}</span>
+          <button onClick={() => { setF(prev => ({ ...prev, document_url: "", document_name: "" })); setDriveLink(""); }} style={{ background: "none", border: "none", color: C.r, cursor: "pointer" }}>✕</button>
+        </div> : mode === "drive" ? <div style={{ display: "flex", gap: 8 }}>
+          <input value={driveLink} onChange={e => setDriveLink(e.target.value)} placeholder="Pega el link del manifiesto en Drive" style={{ flex: 1, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none" }} />
+          <Btn onClick={applyDriveLink} v="secondary" sz="sm" disabled={!driveLink}>Vincular</Btn>
+        </div> : <label style={{ display: "block", padding: "10px 14px", background: C.bg, border: `1px dashed ${C.b}`, borderRadius: 10, cursor: "pointer", fontSize: 12, color: C.tm, textAlign: "center" }}>{uploading ? "Subiendo..." : "📄 Subir manifiesto (PDF/Excel)"}<input type="file" onChange={e => handleUpload(e.target.files[0])} style={{ display: "none" }} /></label>}
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Btn onClick={onClose} v="ghost">Cancelar</Btn>
