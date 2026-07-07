@@ -104,7 +104,29 @@ export default function MyCargo({ toast }) {
     catch (e) { showToast("Error: " + e.message, "error"); }
   };
   const addPackage = async (data) => {
-    try { const shipping = calcShipping(data); await supabase.from("cargo_packages").insert({ ...data, shipping_cost: shipping }); await loadAll(); setModal(null); showToast("Paquete registrado"); }
+    try {
+      const shipping = calcShipping(data);
+      const clean = {
+        cargo_client_id: data.cargo_client_id,
+        manifest_id: data.manifest_id || null,
+        tracking_number: data.tracking_number || "",
+        description: data.description || "",
+        weight: parseFloat(data.weight) || 0,
+        invoice_value: parseFloat(data.invoice_value) || 0,
+        invoice_url: data.invoice_url || "",
+        invoice_name: data.invoice_name || "",
+        rate_type: data.rate_type || "libra",
+        boxes_full: parseInt(data.boxes_full) || 0,
+        boxes_half: parseInt(data.boxes_half) || 0,
+        arancel: parseFloat(data.arancel) || 0,
+        shipping_cost: shipping,
+        status: data.status || "bodega",
+        estimated_delivery: data.estimated_delivery || null,
+      };
+      const { error } = await supabase.from("cargo_packages").insert(clean);
+      if (error) { showToast("Error: " + error.message, "error"); return; }
+      await loadAll(); setModal(null); showToast("Paquete registrado");
+    }
     catch (e) { showToast("Error: " + e.message, "error"); }
   };
   const updPackageStatus = async (id, status) => {
@@ -112,7 +134,12 @@ export default function MyCargo({ toast }) {
     catch { showToast("Error", "error"); }
   };
   const addManifest = async (data) => {
-    try { await supabase.from("cargo_manifests").insert(data); await loadAll(); setModal(null); showToast("Manifiesto creado"); }
+    try {
+      const clean = { name: data.name, shipment_date: data.shipment_date || null, status: data.status || "abierto", document_url: data.document_url || "", document_name: data.document_name || "", notes: data.notes || "" };
+      const { error } = await supabase.from("cargo_manifests").insert(clean);
+      if (error) { showToast("Error: " + error.message, "error"); return; }
+      await loadAll(); setModal(null); showToast("Manifiesto creado");
+    }
     catch (e) { showToast("Error: " + e.message, "error"); }
   };
   const delPackage = async (id) => {
