@@ -207,7 +207,12 @@ export default function MyCargo({ toast, restricted = false }) {
   };
   const addManifest = async (data) => {
     try {
-      const clean = { name: data.name, shipment_date: data.shipment_date || null, status: data.status || "abierto", document_url: data.document_url || "", document_name: data.document_name || "", notes: data.notes || "" };
+      let sheetId = data.sheet_id || "";
+      if (sheetId) {
+        const m = sheetId.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+        if (m) sheetId = m[1];
+      }
+      const clean = { name: data.name, shipment_date: data.shipment_date || null, status: data.status || "abierto", document_url: data.document_url || "", document_name: data.document_name || "", notes: data.notes || "", sheet_id: sheetId };
       const { error } = await supabase.from("cargo_manifests").insert(clean);
       if (error) { showToast("Error: " + error.message, "error"); return; }
       await loadAll(); setModal(null); showToast("Manifiesto creado");
@@ -447,8 +452,9 @@ export default function MyCargo({ toast, restricted = false }) {
                     {m.shipment_date && `📅 ${m.shipment_date} · `}{mPkgs.length} paquetes · {mPkgs.reduce((s, p) => s + (parseFloat(p.weight) || 0), 0).toFixed(1)} lb
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   <Badge label={m.status} color={m.status === "abierto" ? C.w : C.g} />
+                  {m.sheet_id && <Btn onClick={() => setModal({ type: "read_manifest", sheetId: m.sheet_id })} v="secondary" sz="sm">📋 Leer manifiesto</Btn>}
                   {m.document_url && <a href={m.document_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: C.bl, textDecoration: "none", padding: "5px 10px", background: C.blBg, borderRadius: 8, border: `1px solid ${C.bl}30` }}>📄 Ver documento</a>}
                 </div>
               </div>
@@ -463,6 +469,7 @@ export default function MyCargo({ toast, restricted = false }) {
       {modal?.type === "add_client" && <ClientModal onClose={() => setModal(null)} onSave={addClient} />}
       {modal?.type === "add_package" && <PackageModal clients={clients} manifests={manifests} defaultClient={modal.clientId} onClose={() => setModal(null)} onSave={addPackage} showToast={showToast} />}
       {modal?.type === "add_manifest" && <ManifestModal onClose={() => setModal(null)} onSave={addManifest} showToast={showToast} />}
+      {modal?.type === "read_manifest" && <ManifestReader sheetId={modal.sheetId} onClose={() => setModal(null)} showToast={showToast} />}
       {modal?.type === "link_drive" && <LinkDriveModal current={modal.current} onClose={() => setModal(null)} onSave={async (link) => {
         try {
           let fid = link;
@@ -474,6 +481,100 @@ export default function MyCargo({ toast, restricted = false }) {
       }} />}
     </div>
   );
+}
+
+// Lee y parsea un manifiesto en formato "Reporte de Instrucciones para Embarque" desde Google Sheets
+function ManifestReader({ sheetId, onClose, showToast }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!sheetId) { setLoading(false); return; }
+    const tabs = ["Hoja1", "Sheet1", "Manifiesto", "Reporte"];
+    (async () => {
+      let data = null;
+      for (const tab of tabs) {
+        try {
+          const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=${tab}!A1:N500`);
+          const j = await r.json();
+          if (Array.isArray(j) && j.length > 1) { data = j; break; }
+        } catch {}
+      }
+      if (!data) { setError("No se pudo leer el manifiesto. Verifica que el link sea correcto y esté compartido."); setLoading(false); return; }
+      // Parse: cada fila con tracking es un paquete; agrupar por consignatario
+      const parsed = [];
+      let currentConsignee = null;
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (!row || row.every(c => !c)) continue;
+        const [warehouse, tracking, date, custRef, consignee, ci, direccion, ciudad, pcs, wtLbs, wtKgs, categoria, descripcion, partida] = row;
+        if (tracking) {
+          parsed.push({
+            warehouse: warehouse || "", tracking, date: date || "", custRef: custRef || "",
+            consignee: consignee || currentConsignee || custRef || "", weight: parseFloat(wtLbs) || 0,
+            categoria: categoria || "", descripcion: descripcion || "",
+          });
+          if (consignee) currentConsignee = consignee;
+        } else if (consignee && (ci || direccion || ciudad)) {
+          // Fila resumen del consignatario
+          parsed.filter(p => p.consignee === consignee && !p.ci).forEach(p => { p.ci = ci || ""; p.direccion = direccion || ""; p.ciudad = ciudad || ""; });
+        }
+      }
+      setRows(parsed);
+      setLoading(false);
+    })();
+  }, [sheetId]);
+
+  // Agrupar por consignatario
+  const byConsignee = {};
+  rows.forEach(p => {
+    if (!byConsignee[p.consignee]) byConsignee[p.consignee] = [];
+    byConsignee[p.consignee].push(p);
+  });
+
+  const totalWeight = rows.reduce((s, p) => s + p.weight, 0);
+  const totalPkgs = rows.length;
+
+  return <ModalWrap title="📋 Manifiesto leído desde Drive" onClose={onClose} w={720}>
+    {loading ? <p style={{ color: C.acc, fontSize: 13 }}>Leyendo manifiesto...</p>
+      : error ? <p style={{ color: C.r, fontSize: 13 }}>{error}</p>
+        : <div>
+          <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+            <div style={{ background: C.bg, borderRadius: 10, padding: "10px 16px", border: `1px solid ${C.b}` }}><div style={{ fontSize: 10, color: C.tm }}>Total paquetes</div><div style={{ fontFamily: D, fontSize: 22, fontWeight: 800, color: C.acc }}>{totalPkgs}</div></div>
+            <div style={{ background: C.bg, borderRadius: 10, padding: "10px 16px", border: `1px solid ${C.b}` }}><div style={{ fontSize: 10, color: C.tm }}>Peso total</div><div style={{ fontFamily: D, fontSize: 22, fontWeight: 800, color: C.p }}>{totalWeight.toFixed(1)} lb</div></div>
+            <div style={{ background: C.bg, borderRadius: 10, padding: "10px 16px", border: `1px solid ${C.b}` }}><div style={{ fontSize: 10, color: C.tm }}>Consignatarios</div><div style={{ fontFamily: D, fontSize: 22, fontWeight: 800, color: C.g }}>{Object.keys(byConsignee).length}</div></div>
+          </div>
+          <div style={{ maxHeight: 400, overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+            {Object.entries(byConsignee).map(([consignee, pkgs]) => {
+              const cWeight = pkgs.reduce((s, p) => s + p.weight, 0);
+              const info = pkgs.find(p => p.ci || p.direccion || p.ciudad);
+              return <div key={consignee} style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, flexWrap: "wrap", gap: 4 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, fontFamily: D }}>{consignee}</div>
+                    {info && <div style={{ fontSize: 10, color: C.td, marginTop: 2 }}>{info.ci && `CI: ${info.ci} · `}{info.direccion}{info.ciudad ? `, ${info.ciudad}` : ""}</div>}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.p }}>{cWeight.toFixed(1)} lb</div>
+                    <div style={{ fontSize: 10, color: C.td }}>{pkgs.length} paquetes</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {pkgs.map((p, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, padding: "5px 8px", background: C.s2, borderRadius: 6 }}>
+                    <span style={{ color: C.tm, fontFamily: "monospace", fontSize: 10, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.tracking}</span>
+                    {p.categoria && <span style={{ color: C.w, fontSize: 9, padding: "1px 6px", background: C.w + "15", borderRadius: 4 }}>Cat {p.categoria}</span>}
+                    {p.descripcion && <span style={{ color: C.td, fontSize: 10 }}>{p.descripcion}</span>}
+                    <span style={{ color: C.p, fontWeight: 600 }}>{p.weight} lb</span>
+                    <span style={{ color: C.td, fontSize: 9 }}>{p.date}</span>
+                  </div>)}
+                </div>
+              </div>;
+            })}
+          </div>
+          <p style={{ fontSize: 10, color: C.td, marginTop: 12 }}>La plataforma leyó el manifiesto directamente desde Drive y agrupó los paquetes por consignatario. Total: {totalPkgs} paquetes, {totalWeight.toFixed(1)} lb.</p>
+        </div>}
+  </ModalWrap>;
 }
 
 function DriveViewer({ folderId }) {
@@ -658,7 +759,7 @@ function PackageModal({ clients, manifests, defaultClient, onClose, onSave, show
 }
 
 function ManifestModal({ onClose, onSave, showToast }) {
-  const [f, setF] = useState({ name: "", shipment_date: "", status: "abierto", document_url: "", document_name: "", notes: "" });
+  const [f, setF] = useState({ name: "", shipment_date: "", status: "abierto", document_url: "", document_name: "", notes: "", sheet_id: "" });
   const [uploading, setUploading] = useState(false);
   const [mode, setMode] = useState("drive"); // 'drive' o 'upload'
   const [driveLink, setDriveLink] = useState("");
@@ -706,6 +807,11 @@ function ManifestModal({ onClose, onSave, showToast }) {
           <input value={driveLink} onChange={e => setDriveLink(e.target.value)} placeholder="Pega el link del manifiesto en Drive" style={{ flex: 1, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none" }} />
           <Btn onClick={applyDriveLink} v="secondary" sz="sm" disabled={!driveLink}>Vincular</Btn>
         </div> : <label style={{ display: "block", padding: "10px 14px", background: C.bg, border: `1px dashed ${C.b}`, borderRadius: 10, cursor: "pointer", fontSize: 12, color: C.tm, textAlign: "center" }}>{uploading ? "Subiendo..." : "📄 Subir manifiesto (PDF/Excel)"}<input type="file" onChange={e => handleUpload(e.target.files[0])} style={{ display: "none" }} /></label>}
+      </div>
+      <div style={{ background: C.g + "0A", border: `1px solid ${C.g}30`, borderRadius: 12, padding: 14 }}>
+        <label style={{ fontSize: 11, fontWeight: 600, color: C.g, fontFamily: F, display: "block", marginBottom: 6 }}>📋 Link del manifiesto en Google Sheets (para lectura automática)</label>
+        <input value={f.sheet_id} onChange={e => setF({ ...f, sheet_id: e.target.value })} placeholder="Pega el link del Sheet del manifiesto" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none" }} />
+        <p style={{ fontSize: 10, color: C.td, marginTop: 6, lineHeight: 1.6 }}>Si pegas el link del Google Sheet, la plataforma lo lee y entiende: agrupa los paquetes por consignatario, suma pesos y detecta categorías. El Sheet debe tener las columnas del formato de embarque (Warehouse, TrackingNo, Consignatario, etc.).</p>
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Btn onClick={onClose} v="ghost">Cancelar</Btn>
