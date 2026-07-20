@@ -22,6 +22,7 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
   const [selBatch, setSelBatch] = useState("todos");
+  const [filterChannel, setFilterChannel] = useState("todos");
   const showToast = toast || (() => {});
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
@@ -50,6 +51,12 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
     if (filterStatus !== "todos" && l.outbound_status !== filterStatus) return false;
     if (selBatch !== "todos" && l.batch !== selBatch) return false;
     if (search && !(l.company + l.city + l.industry + l.owner_name).toLowerCase().includes(search.toLowerCase())) return false;
+    const hasIG = l.instagram && l.instagram.startsWith("http");
+    const hasFB = l.facebook && l.facebook.startsWith("http");
+    const hasEmail = l.email && l.email.includes("@");
+    if (filterChannel === "instagram" && !hasIG) return false;
+    if (filterChannel === "email" && !hasEmail) return false;
+    if (filterChannel === "sin_social" && (hasIG || hasFB)) return false;
     return true;
   });
 
@@ -78,6 +85,12 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar empresa, ciudad..." style={{ flex: 1, minWidth: 180, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none" }} />
         {batches.length > 0 && <select value={selBatch} onChange={e => setSelBatch(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}><option value="todos">Todos los lotes</option>{batches.map(b => <option key={b} value={b}>{b}</option>)}</select>}
+        <select value={filterChannel} onChange={e => setFilterChannel(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}>
+          <option value="todos">Todos los canales</option>
+          <option value="instagram">Con Instagram</option>
+          <option value="email">Con Email</option>
+          <option value="sin_social">Sin redes (solo email/tel)</option>
+        </select>
         {filterStatus !== "todos" && <Btn onClick={() => setFilterStatus("todos")} v="ghost" sz="sm">✕ Ver todos</Btn>}
       </div>
 
@@ -95,11 +108,27 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
                   {lead.lead_score > 0 && <span style={{ fontSize: 9, color: C.acc }}>Score {lead.lead_score}</span>}
                 </div>
                 <div style={{ fontSize: 11, color: C.tm }}>{lead.industry}{lead.city ? ` · ${lead.city}` : ""}</div>
+                {/* Canales de contacto disponibles */}
+                <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
+                  {(() => {
+                    const hasIG = lead.instagram && lead.instagram.startsWith("http");
+                    const hasFB = lead.facebook && lead.facebook.startsWith("http");
+                    const hasEmail = lead.email && lead.email.includes("@");
+                    const hasPhone = lead.phone && lead.phone.length > 4;
+                    const chip = (ok, label, color) => <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: ok ? color + "18" : C.b + "40", color: ok ? color : C.td, border: `1px solid ${ok ? color + "30" : "transparent"}` }}>{ok ? "✓" : "✕"} {label}</span>;
+                    return <>
+                      {chip(hasIG, "Instagram", "#E1306C")}
+                      {chip(hasFB, "Facebook", "#1877F2")}
+                      {chip(hasEmail, "Email", C.acc)}
+                      {chip(hasPhone, "Teléfono", C.g)}
+                    </>;
+                  })()}
+                </div>
                 <div style={{ display: "flex", gap: 10, marginTop: 6, fontSize: 10, color: C.td, flexWrap: "wrap" }}>
                   {lead.owner_name && lead.owner_name !== "No encontrado públicamente" && <span>👤 {lead.owner_name}</span>}
-                  {lead.phone && <span>📞 {lead.phone}</span>}
-                  {lead.email && <span>✉️ {lead.email}</span>}
-                  {lead.instagram && <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ color: C.p, textDecoration: "none" }}>📷 IG</a>}
+                  {lead.phone && lead.phone.length > 4 && <span>📞 {lead.phone}</span>}
+                  {lead.email && lead.email.includes("@") && <a href={`mailto:${lead.email}`} style={{ color: C.acc, textDecoration: "none" }}>✉️ {lead.email}</a>}
+                  {lead.instagram && lead.instagram.startsWith("http") && <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ color: C.p, textDecoration: "none" }}>📷 IG</a>}
                 </div>
                 {lead.problem && <div style={{ fontSize: 10, color: C.td, marginTop: 6, fontStyle: "italic" }}>💡 {lead.problem.slice(0, 120)}{lead.problem.length > 120 ? "..." : ""}</div>}
               </div>
@@ -216,20 +245,25 @@ function DetailModal({ lead, onClose, onSaveNotes }) {
   const [notes, setNotes] = useState(lead.notes || "");
   const field = (label, value) => value && value !== "No encontrado públicamente" ? <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>{label}</div><div style={{ fontSize: 12, color: C.tx, marginTop: 2 }}>{value}</div></div> : null;
   return <ModalWrap title={lead.company} onClose={onClose} w={620}>
+    {/* Canales de contacto */}
+    <div style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Cómo contactar</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {lead.email && lead.email.includes("@") ? <a href={`mailto:${lead.email}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.acc, textDecoration: "none" }}>✉️ {lead.email}</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
+        {lead.phone && lead.phone.length > 4 ? <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.g }}>📞 {lead.phone}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin teléfono</div>}
+        {lead.instagram && lead.instagram.startsWith("http") ? <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#E1306C", textDecoration: "none" }}>📷 Instagram ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Instagram</div>}
+        {lead.facebook && lead.facebook.startsWith("http") ? <a href={lead.facebook} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#1877F2", textDecoration: "none" }}>📘 Facebook ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Facebook</div>}
+      </div>
+    </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
       {field("Industria", lead.industry)}{field("Ciudad", lead.city)}
-      {field("Dirección", lead.address)}{field("Teléfono", lead.phone)}
-      {field("Email", lead.email)}{field("Propietario", lead.owner_name)}
+      {field("Dirección", lead.address)}{field("Propietario", lead.owner_name)}
       {field("Cargo", lead.owner_role)}{field("Estado web", lead.website_status)}
     </div>
     {field("Problema detectado", lead.problem)}
     {field("Oportunidad estratégica", lead.opportunity)}
     {field("Solución recomendada", lead.recommended_solution)}
     {lead.initial_message && <div style={{ marginBottom: 12 }}><div style={{ fontSize: 10, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Mensaje inicial</div><div style={{ fontSize: 12, color: C.tx, marginTop: 4, background: C.bg, padding: 12, borderRadius: 10, border: `1px solid ${C.b}`, lineHeight: 1.6 }}>{lead.initial_message}</div></div>}
-    <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-      {lead.instagram && <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ color: C.p, fontSize: 12, textDecoration: "none" }}>📷 Instagram</a>}
-      {lead.facebook && <a href={lead.facebook} target="_blank" rel="noopener noreferrer" style={{ color: C.p, fontSize: 12, textDecoration: "none" }}>📘 Facebook</a>}
-    </div>
     <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Notas de seguimiento</label><textarea value={notes} onChange={e => setNotes(e.target.value)} onBlur={() => onSaveNotes(lead.id, notes)} placeholder="Anota lo que pase con este lead..." style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", minHeight: 70, marginTop: 6, resize: "vertical" }} /></div>
   </ModalWrap>;
 }
