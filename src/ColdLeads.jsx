@@ -154,7 +154,7 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
       </div>
 
       {modal?.type === "import" && <ImportModal onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
-      {modal?.type === "detail" && <DetailModal lead={modal.lead} onClose={() => setModal(null)} onSaveNotes={updNotes} />}
+      {modal?.type === "detail" && <DetailModal lead={modal.lead} onClose={() => setModal(null)} onSaveNotes={updNotes} onCopied={() => showToast("Copiado")} />}
       {modal?.type === "convert" && <ConvertModal lead={modal.lead} onClose={() => setModal(null)} onConvert={onConvert} showToast={showToast} onReload={onReload} />}
     </div>
   );
@@ -196,6 +196,8 @@ function ImportModal({ onClose, onReload, showToast }) {
       opportunity: col("oportunidad"), solution: col("solución web", "solution"),
       priority: col("prioridad"), score: col("lead score", "score"),
       message: col("mensaje inicial"), obs: col("observaciones"),
+      email_subject: col("asunto de email", "asunto"), email_body: col("email inicial"),
+      followup_1: col("seguimiento 1"), followup_2: col("seguimiento 2"),
     };
     const rows = data.slice(headerIdx + 1).filter(r => r[idx.company]).map(r => ({
       lead_id: r[idx.lead_id] || "", company: r[idx.company] || "", industry: r[idx.industry] || "",
@@ -206,6 +208,8 @@ function ImportModal({ onClose, onReload, showToast }) {
       recommended_solution: r[idx.solution] || "", priority: r[idx.priority] || "",
       lead_score: parseFloat(r[idx.score]) || 0, initial_message: r[idx.message] || "",
       observations: r[idx.obs] || "", batch: batch || "Lote sin nombre", outbound_status: "sin_contactar",
+      email_subject: r[idx.email_subject] || "", email_body: r[idx.email_body] || "",
+      followup_1: r[idx.followup_1] || "", followup_2: r[idx.followup_2] || "",
     }));
     setPreview(rows);
     setLoading(false);
@@ -241,7 +245,17 @@ function ImportModal({ onClose, onReload, showToast }) {
   </ModalWrap>;
 }
 
-function DetailModal({ lead, onClose, onSaveNotes }) {
+function MsgBlock({ label, text, onCopied }) {
+  return <div style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>{label}</span>
+      <button onClick={() => { navigator.clipboard.writeText(text); onCopied && onCopied(); }} style={{ background: C.acc, border: "none", borderRadius: 8, padding: "5px 12px", color: "#060B18", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: F }}>📋 Copiar</button>
+    </div>
+    <div style={{ fontSize: 12, color: C.tx, background: C.bg, padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.b}`, lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto" }}>{text}</div>
+  </div>;
+}
+
+function DetailModal({ lead, onClose, onSaveNotes, onCopied }) {
   const [notes, setNotes] = useState(lead.notes || "");
   const field = (label, value) => value && value !== "No encontrado públicamente" ? <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>{label}</div><div style={{ fontSize: 12, color: C.tx, marginTop: 2 }}>{value}</div></div> : null;
   return <ModalWrap title={lead.company} onClose={onClose} w={620}>
@@ -263,7 +277,30 @@ function DetailModal({ lead, onClose, onSaveNotes }) {
     {field("Problema detectado", lead.problem)}
     {field("Oportunidad estratégica", lead.opportunity)}
     {field("Solución recomendada", lead.recommended_solution)}
-    {lead.initial_message && <div style={{ marginBottom: 12 }}><div style={{ fontSize: 10, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Mensaje inicial</div><div style={{ fontSize: 12, color: C.tx, marginTop: 4, background: C.bg, padding: 12, borderRadius: 10, border: `1px solid ${C.b}`, lineHeight: 1.6 }}>{lead.initial_message}</div></div>}
+    {/* MENSAJES LISTOS PARA COPIAR */}
+    {(lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1) && <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.acc, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>📋 Mensajes listos para enviar</div>
+      {/* Email */}
+      {(lead.email_subject || lead.email_body) && <div style={{ background: C.acc + "0A", border: `1px solid ${C.acc}30`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: C.acc }}>✉️ Email inicial</span>
+          <button onClick={() => { navigator.clipboard.writeText((lead.email_subject ? `Asunto: ${lead.email_subject}\n\n` : "") + (lead.email_body || "")); onCopied && onCopied(); }} style={{ background: C.acc, border: "none", borderRadius: 8, padding: "5px 12px", color: "#060B18", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: F }}>📋 Copiar todo</button>
+        </div>
+        {lead.email_subject && <div style={{ marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}><span style={{ fontSize: 9, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Asunto</span><button onClick={() => { navigator.clipboard.writeText(lead.email_subject); onCopied && onCopied(); }} style={{ background: "none", border: "none", color: C.acc, fontSize: 9, cursor: "pointer", fontFamily: F }}>copiar</button></div>
+          <div style={{ fontSize: 12, color: C.tx, background: C.bg, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.b}` }}>{lead.email_subject}</div>
+        </div>}
+        {lead.email_body && <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}><span style={{ fontSize: 9, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Cuerpo</span><button onClick={() => { navigator.clipboard.writeText(lead.email_body); onCopied && onCopied(); }} style={{ background: "none", border: "none", color: C.acc, fontSize: 9, cursor: "pointer", fontFamily: F }}>copiar</button></div>
+          <div style={{ fontSize: 12, color: C.tx, background: C.bg, padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.b}`, lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>{lead.email_body}</div>
+        </div>}
+        {lead.email && lead.email.includes("@") && <a href={`mailto:${lead.email}?subject=${encodeURIComponent(lead.email_subject || "")}&body=${encodeURIComponent(lead.email_body || "")}`} style={{ display: "inline-block", marginTop: 8, fontSize: 11, color: C.acc, textDecoration: "none", fontWeight: 600 }}>✉️ Abrir en correo →</a>}
+      </div>}
+      {/* Mensaje inicial IG/DM */}
+      {lead.initial_message && <MsgBlock label="📷 Mensaje inicial (Instagram/DM)" text={lead.initial_message} onCopied={onCopied} />}
+      {lead.followup_1 && <MsgBlock label="🔁 Seguimiento 1" text={lead.followup_1} onCopied={onCopied} />}
+      {lead.followup_2 && <MsgBlock label="🔁 Seguimiento 2" text={lead.followup_2} onCopied={onCopied} />}
+    </div>}
     <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Notas de seguimiento</label><textarea value={notes} onChange={e => setNotes(e.target.value)} onBlur={() => onSaveNotes(lead.id, notes)} placeholder="Anota lo que pase con este lead..." style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", minHeight: 70, marginTop: 6, resize: "vertical" }} /></div>
   </ModalWrap>;
 }
