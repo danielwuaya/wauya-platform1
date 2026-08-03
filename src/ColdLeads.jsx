@@ -17,22 +17,28 @@ function Btn({ children, onClick, v = "primary", sz = "md", disabled, style: sx 
 function Card({ children, style: sx, onClick }) { return <div onClick={onClick} style={{ background: `${C.s}e8`, borderRadius: 14, border: `1px solid ${C.b}80`, padding: 18, cursor: onClick ? "pointer" : "default", transition: "all .2s", ...sx }}>{children}</div>; }
 function ModalWrap({ title, onClose, children, w = 560 }) { return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(16px)" }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}><div style={{ background: `linear-gradient(160deg,${C.s}f5,${C.bg}f0)`, borderRadius: 20, border: `1px solid ${C.b}`, width: "92%", maxWidth: w, maxHeight: "88vh", overflow: "auto", animation: "modalIn .25s", boxShadow: "0 24px 80px rgba(0,0,0,.5)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", borderBottom: `1px solid ${C.b}60`, position: "sticky", top: 0, background: `${C.s}f5`, zIndex: 1 }}><h3 style={{ fontFamily: D, fontSize: 17, fontWeight: 600, color: C.tx }}>{title}</h3><button onClick={onClose} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 10, width: 30, height: 30, color: C.tm, cursor: "pointer", fontSize: 13 }}>✕</button></div><div style={{ padding: 22 }}>{children}</div></div></div>; }
 
-export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
+export default function ColdLeads({ leads = [], employees = [], currentUser = null, onReload, onConvert, toast }) {
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
   const [selBatch, setSelBatch] = useState("todos");
   const [filterChannel, setFilterChannel] = useState("todos");
+  const [filterSeller, setFilterSeller] = useState("todos");
   const showToast = toast || (() => {});
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
-  const batches = useMemo(() => [...new Set(leads.map(l => l.batch).filter(Boolean))], [leads]);
+  // Si el usuario es vendedor, solo ve sus propios leads
+  const isSeller = currentUser?.role === "employee" && currentUser?.department === "ventas";
+  const sellers = employees.filter(e => e.department === "ventas");
+  const visibleLeads = isSeller ? leads.filter(l => l.assigned_seller === currentUser.id) : leads;
+
+  const batches = useMemo(() => [...new Set(visibleLeads.map(l => l.batch).filter(Boolean))], [visibleLeads]);
 
   const stats = useMemo(() => {
     const byStatus = {};
-    OUTBOUND_STATUS.forEach(s => byStatus[s.value] = leads.filter(l => l.outbound_status === s.value).length);
-    return { total: leads.length, byStatus };
-  }, [leads]);
+    OUTBOUND_STATUS.forEach(s => byStatus[s.value] = visibleLeads.filter(l => l.outbound_status === s.value).length);
+    return { total: visibleLeads.length, byStatus };
+  }, [visibleLeads]);
 
   const updStatus = async (id, status) => {
     try { await supabase.from("cold_leads").update({ outbound_status: status }).eq("id", id); onReload(); showToast("Estado actualizado"); }
@@ -47,9 +53,10 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
     try { await supabase.from("cold_leads").delete().eq("id", id); onReload(); showToast("Eliminado"); } catch {}
   };
 
-  const filtered = leads.filter(l => {
+  const filtered = visibleLeads.filter(l => {
     if (filterStatus !== "todos" && l.outbound_status !== filterStatus) return false;
     if (selBatch !== "todos" && l.batch !== selBatch) return false;
+    if (filterSeller !== "todos" && l.assigned_seller !== filterSeller) return false;
     if (search && !(l.company + l.city + l.industry + l.owner_name).toLowerCase().includes(search.toLowerCase())) return false;
     const hasIG = l.instagram && l.instagram.startsWith("http");
     const hasFB = l.facebook && l.facebook.startsWith("http");
@@ -64,11 +71,33 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
     <div style={{ animation: "fadeUp .3s ease" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h1 style={{ fontFamily: D, fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.tx, letterSpacing: "-.02em" }}>Leads Fríos</h1>
-          <p style={{ fontSize: 12, color: C.td }}>Prospección outbound · {leads.length} leads</p>
+          <h1 style={{ fontFamily: D, fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.tx, letterSpacing: "-.02em" }}>{isSeller ? "Mi CRM" : "Leads Fríos"}</h1>
+          <p style={{ fontSize: 12, color: C.td }}>{isSeller ? "Tu pipeline de prospección" : `Prospección outbound · ${visibleLeads.length} leads`}</p>
         </div>
-        <Btn onClick={() => setModal({ type: "import" })}>+ Importar lote</Btn>
+        {!isSeller && <Btn onClick={() => setModal({ type: "import" })}>+ Importar lote</Btn>}
       </div>
+
+      {/* Métricas por vendedor (solo admin) */}
+      {!isSeller && sellers.length > 0 && <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {sellers.map(sel => {
+          const sLeads = leads.filter(l => l.assigned_seller === sel.id);
+          const contacted = sLeads.filter(l => l.outbound_status !== "sin_contactar").length;
+          const demos = sLeads.filter(l => l.outbound_status === "reunion").length;
+          const rate = sLeads.length > 0 ? Math.round((demos / sLeads.length) * 100) : 0;
+          return <div key={sel.id} onClick={() => setFilterSeller(filterSeller === sel.id ? "todos" : sel.id)} style={{ flex: "1 1 160px", minWidth: 150, background: filterSeller === sel.id ? C.g + "12" : `${C.s}e8`, border: `1px solid ${filterSeller === sel.id ? C.g : C.b}80`, borderRadius: 12, padding: 14, cursor: "pointer", transition: "all .2s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: C.g + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.g, fontFamily: D }}>{sel.name[0]}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>{sel.name}</div>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div><div style={{ fontFamily: D, fontSize: 18, fontWeight: 800, color: C.tx }}>{sLeads.length}</div><div style={{ fontSize: 8, color: C.td }}>Leads</div></div>
+              <div><div style={{ fontFamily: D, fontSize: 18, fontWeight: 800, color: C.bl }}>{contacted}</div><div style={{ fontSize: 8, color: C.td }}>Contactados</div></div>
+              <div><div style={{ fontFamily: D, fontSize: 18, fontWeight: 800, color: C.g }}>{demos}</div><div style={{ fontSize: 8, color: C.td }}>Demos</div></div>
+              <div><div style={{ fontFamily: D, fontSize: 18, fontWeight: 800, color: C.acc }}>{rate}%</div><div style={{ fontSize: 8, color: C.td }}>Conv.</div></div>
+            </div>
+          </div>;
+        })}
+      </div>}
 
       {/* Status pipeline stats */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
@@ -106,6 +135,7 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
                   <span style={{ fontSize: 15, fontWeight: 700, color: C.tx, fontFamily: D }}>{lead.company}</span>
                   {lead.priority && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: lead.priority === "A" ? C.g + "20" : lead.priority === "B" ? C.w + "20" : C.td + "20", color: lead.priority === "A" ? C.g : lead.priority === "B" ? C.w : C.td }}>Prioridad {lead.priority}</span>}
                   {lead.lead_score > 0 && <span style={{ fontSize: 9, color: C.acc }}>Score {lead.lead_score}</span>}
+                  {!isSeller && lead.assigned_seller && (() => { const s = sellers.find(e => e.id === lead.assigned_seller); return s ? <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 6, background: C.g + "18", color: C.g }}>📞 {s.name}</span> : null; })()}
                 </div>
                 <div style={{ fontSize: 11, color: C.tm }}>{lead.industry}{lead.city ? ` · ${lead.city}` : ""}</div>
                 {/* Canales de contacto disponibles */}
@@ -153,16 +183,17 @@ export default function ColdLeads({ leads = [], onReload, onConvert, toast }) {
         {filtered.length === 0 && <Card style={{ textAlign: "center", padding: 40 }}><p style={{ color: C.td }}>{leads.length === 0 ? 'Sin leads. Click "+ Importar lote" para cargar tu primera tabla.' : "Ningún lead con estos filtros."}</p></Card>}
       </div>
 
-      {modal?.type === "import" && <ImportModal onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
+      {modal?.type === "import" && <ImportModal sellers={sellers} onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
       {modal?.type === "detail" && <DetailModal lead={modal.lead} onClose={() => setModal(null)} onSaveNotes={updNotes} onCopied={() => showToast("Copiado")} />}
       {modal?.type === "convert" && <ConvertModal lead={modal.lead} onClose={() => setModal(null)} onConvert={onConvert} showToast={showToast} onReload={onReload} />}
     </div>
   );
 }
 
-function ImportModal({ onClose, onReload, showToast }) {
+function ImportModal({ sellers = [], onClose, onReload, showToast }) {
   const [link, setLink] = useState("");
   const [batch, setBatch] = useState("");
+  const [assignSeller, setAssignSeller] = useState("");
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
 
@@ -210,6 +241,7 @@ function ImportModal({ onClose, onReload, showToast }) {
       observations: r[idx.obs] || "", batch: batch || "Lote sin nombre", outbound_status: "sin_contactar",
       email_subject: r[idx.email_subject] || "", email_body: r[idx.email_body] || "",
       followup_1: r[idx.followup_1] || "", followup_2: r[idx.followup_2] || "",
+      assigned_seller: assignSeller || null,
     }));
     setPreview(rows);
     setLoading(false);
@@ -228,6 +260,7 @@ function ImportModal({ onClose, onReload, showToast }) {
   return <ModalWrap title="Importar lote de leads" onClose={onClose}>
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Nombre del lote</label><input value={batch} onChange={e => setBatch(e.target.value)} placeholder="Ej: Niágara Automotriz Lote 01" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
+      {sellers.length > 0 && <div><label style={{ fontSize: 11, fontWeight: 600, color: C.g, fontFamily: F }}>Asignar a vendedor</label><select value={assignSeller} onChange={e => setAssignSeller(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${assignSeller ? C.g : C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6, cursor: "pointer" }}><option value="">— Sin asignar (visible solo para admin) —</option>{sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><p style={{ fontSize: 10, color: C.td, marginTop: 4 }}>Estos leads aparecerán en el CRM de ese vendedor.</p></div>}
       <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Link del Google Sheet</label><input value={link} onChange={e => setLink(e.target.value)} placeholder="Pega el link del Sheet con los leads" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
       <div style={{ background: C.blBg, borderRadius: 10, padding: 12, border: `1px solid ${C.bl}25`, fontSize: 11, color: C.tm, lineHeight: 1.6 }}>El Sheet debe ser Google Sheet nativo (no .xlsx), compartido como "Cualquiera con el enlace → Lector", con una pestaña "Leads". La plataforma detecta las columnas automáticamente por nombre.</div>
       {!preview ? <Btn onClick={readSheet} disabled={!link || loading}>{loading ? "Leyendo..." : "Leer y previsualizar"}</Btn>
