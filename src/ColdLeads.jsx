@@ -176,6 +176,15 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar empresa, ciudad..." style={{ flex: 1, minWidth: 180, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none" }} />
         {batches.length > 0 && <select value={selBatch} onChange={e => setSelBatch(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}><option value="todos">Todos los lotes</option>{batches.map(b => <option key={b} value={b}>{b}</option>)}</select>}
+        {!isSeller && selBatch !== "todos" && <Btn onClick={async () => {
+          const count = leads.filter(l => l.batch === selBatch).length;
+          if (!confirm(`¿Eliminar el lote "${selBatch}" completo? Se borrarán ${count} leads. Esta acción no se puede deshacer.`)) return;
+          try {
+            const { error } = await supabase.from("cold_leads").delete().eq("batch", selBatch);
+            if (error) { showToast("Error: " + error.message, "error"); return; }
+            setSelBatch("todos"); onReload(); showToast(`Lote "${selBatch}" eliminado (${count} leads)`);
+          } catch (e) { showToast("Error: " + e.message, "error"); }
+        }} v="secondary" sz="sm" style={{ color: C.r, borderColor: C.r + "40" }}>🗑️ Borrar lote</Btn>}
         <select value={filterChannel} onChange={e => setFilterChannel(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}>
           <option value="todos">Todos los canales</option>
           <option value="instagram">Con Instagram</option>
