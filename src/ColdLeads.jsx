@@ -15,7 +15,7 @@ const OUTBOUND_STATUS = [
 
 // Lee un Google Sheet de leads y devuelve las filas parseadas
 async function readLeadsSheet(sheetId, batch, assignSeller) {
-  const tabs = ["Leads", "Hoja1", "Sheet1", "Prospeccion"];
+  const tabs = ["Leads", "Hoja1", "Sheet1", "Prospeccion", "Hoja 1", "Sheet 1"];
   let data = null, lastErr = "";
   for (const tab of tabs) {
     try {
@@ -23,6 +23,15 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
       const j = await r.json();
       if (j.error) { lastErr = j.error; continue; }
       if (Array.isArray(j) && j.length > 2) { data = j; break; }
+    } catch (e) { lastErr = e.message; }
+  }
+  // Fallback: primera hoja sin importar el nombre
+  if (!data) {
+    try {
+      const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=A1:AZ200`);
+      const j = await r.json();
+      if (Array.isArray(j) && j.length > 2) data = j;
+      else if (j.error) lastErr = j.error;
     } catch (e) { lastErr = e.message; }
   }
   if (!data) throw new Error(lastErr || "No se pudo leer. Verifica que sea Google Sheet compartido.");
@@ -441,97 +450,110 @@ function ConvertModal({ lead, onClose, onConvert, showToast, onReload }) {
 }
 
 function FoldersModal({ folders = [], sellers = [], onClose, onReload, showToast }) {
-  const [view, setView] = useState("list"); // list | add | browse
-  const [name, setName] = useState("");
+  const [assignSeller, setAssignSeller] = useState("");
   const [link, setLink] = useState("");
-  const [browsing, setBrowsing] = useState(null); // folder being browsed
-  const [sheets, setSheets] = useState([]);
+  const [saveName, setSaveName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [importSeller, setImportSeller] = useState("");
+  const [sheets, setSheets] = useState(null);
+  const [browsedName, setBrowsedName] = useState("");
   const [importingId, setImportingId] = useState(null);
+  const [importedIds, setImportedIds] = useState([]);
 
-  const addFolder = async () => {
-    if (!name || !link) return;
-    let fid = link;
-    const m = link.match(/folders\/([a-zA-Z0-9_-]+)/);
-    if (m) fid = m[1];
+  const extractId = (l) => { const m = l.match(/folders\/([a-zA-Z0-9_-]+)/); return m ? m[1] : l.trim(); };
+
+  const browse = async (folderId, label) => {
+    setLoading(true); setSheets(null); setBrowsedName(label || "");
     try {
-      const { error } = await supabase.from("lead_folders").insert({ name, drive_folder_id: fid });
-      if (error) { showToast("Error: " + error.message, "error"); return; }
-      onReload(); setName(""); setLink(""); setView("list"); showToast("Carpeta agregada");
+      const r = await fetch(`/api/drive?action=list&folderId=${folderId}`);
+      const j = await r.json();
+      const files = Array.isArray(j.files) ? j.files : Array.isArray(j) ? j : [];
+      const onlySheets = files.filter(f => f.mimeType && f.mimeType.includes("spreadsheet"));
+      setSheets(onlySheets.length > 0 ? onlySheets : files);
+    } catch (e) { showToast("Error leyendo carpeta", "error"); setSheets([]); }
+    setLoading(false);
+  };
+
+  const browseFromLink = () => { if (!link) return; browse(extractId(link), ""); };
+
+  const saveFolder = async () => {
+    if (!saveName || !link) { showToast("Ponle nombre a la carpeta para guardarla", "error"); return; }
+    try {
+      await supabase.from("lead_folders").insert({ name: saveName, drive_folder_id: extractId(link) });
+      onReload(); setSaveName(""); showToast("Carpeta guardada");
     } catch (e) { showToast("Error: " + e.message, "error"); }
   };
 
   const delFolder = async (id) => {
-    if (!confirm("¿Eliminar esta carpeta? (No borra nada de Drive)")) return;
-    try { await supabase.from("lead_folders").delete().eq("id", id); onReload(); showToast("Carpeta eliminada"); } catch {}
-  };
-
-  const browseFolder = async (folder) => {
-    setBrowsing(folder); setView("browse"); setLoading(true); setSheets([]);
-    try {
-      const r = await fetch(`/api/drive?action=list&folderId=${folder.drive_folder_id}`);
-      const j = await r.json();
-      const files = Array.isArray(j.files) ? j.files : Array.isArray(j) ? j : [];
-      // Solo Google Sheets
-      const onlySheets = files.filter(f => f.mimeType && f.mimeType.includes("spreadsheet"));
-      setSheets(onlySheets.length > 0 ? onlySheets : files);
-    } catch (e) { showToast("Error leyendo carpeta", "error"); }
-    setLoading(false);
+    if (!confirm("¿Eliminar esta carpeta guardada? (No borra nada de Drive)")) return;
+    try { await supabase.from("lead_folders").delete().eq("id", id); onReload(); } catch {}
   };
 
   const importSheet = async (sheet) => {
     setImportingId(sheet.id);
     try {
-      const rows = await readLeadsSheet(sheet.id, sheet.name, importSeller || null);
+      const rows = await readLeadsSheet(sheet.id, sheet.name, assignSeller || null);
       if (rows.length === 0) { showToast("No se encontraron leads en " + sheet.name, "error"); setImportingId(null); return; }
       const { error } = await supabase.from("cold_leads").insert(rows);
       if (error) { showToast("Error: " + error.message, "error"); setImportingId(null); return; }
-      onReload(); showToast(`${rows.length} leads importados de "${sheet.name}"`);
+      onReload(); setImportedIds(p => [...p, sheet.id]); showToast(`${rows.length} leads importados de "${sheet.name}"`);
     } catch (e) { showToast("Error: " + e.message, "error"); }
     setImportingId(null);
   };
 
-  return <ModalWrap title="📁 Carpetas de leads" onClose={onClose} w={600}>
-    {view === "list" && <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <p style={{ fontSize: 12, color: C.tm, lineHeight: 1.6 }}>Organiza tus carpetas de Drive por ciudad e industria. La plataforma lee cada carpeta y te muestra las tablas para importar con un click.</p>
-      {folders.length === 0 ? <div style={{ textAlign: "center", padding: 24, color: C.td, fontSize: 12 }}>Sin carpetas. Agrega tu primera carpeta de Drive.</div>
-        : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{folders.map(f => (
-          <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.bg, borderRadius: 12, border: `1px solid ${C.b}` }}>
-            <span style={{ fontSize: 18 }}>📁</span>
-            <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>{f.name}</div></div>
-            <Btn onClick={() => browseFolder(f)} sz="sm">Ver tablas</Btn>
-            <button onClick={() => delFolder(f.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.r, fontSize: 12 }}>🗑️</button>
-          </div>
-        ))}</div>}
-      <Btn onClick={() => setView("add")} v="secondary">+ Agregar carpeta</Btn>
-    </div>}
+  return <ModalWrap title="📁 Importar carpetas de leads" onClose={onClose} w={600}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* 1. Vendedor */}
+      {sellers.length > 0 && <div>
+        <label style={{ fontSize: 11, fontWeight: 700, color: C.g, fontFamily: F }}>1. Asignar a vendedor</label>
+        <select value={assignSeller} onChange={e => setAssignSeller(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${assignSeller ? C.g : C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6, cursor: "pointer" }}>
+          <option value="">— Sin asignar (solo admin) —</option>
+          {sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>}
 
-    {view === "add" && <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Nombre (ciudad - industria)</label><input value={name} onChange={e => setName(e.target.value)} placeholder="Ej: St. Catharines - Automotriz" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
-      <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Link de la carpeta de Drive</label><input value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
-      <div style={{ background: C.blBg, borderRadius: 10, padding: 12, border: `1px solid ${C.bl}25`, fontSize: 11, color: C.tm, lineHeight: 1.6 }}>La carpeta debe estar compartida como "Cualquiera con el enlace → Lector". Adentro pon tus Google Sheets de leads (cada uno con pestaña "Leads").</div>
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <Btn onClick={() => setView("list")} v="ghost">Volver</Btn>
-        <Btn onClick={addFolder} disabled={!name || !link}>Guardar carpeta</Btn>
+      {/* 2. Link */}
+      <div>
+        <label style={{ fontSize: 11, fontWeight: 700, color: C.acc, fontFamily: F }}>2. Link de la carpeta de Drive</label>
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <input value={link} onChange={e => setLink(e.target.value)} placeholder="Pega el link de la carpeta" style={{ flex: 1, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none" }} />
+          <Btn onClick={browseFromLink} disabled={!link || loading}>{loading ? "..." : "Ver tablas"}</Btn>
+        </div>
       </div>
-    </div>}
 
-    {view === "browse" && <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button onClick={() => setView("list")} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "4px 10px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>← Carpetas</button>
-        <span style={{ fontSize: 14, fontWeight: 600, color: C.tx }}>📁 {browsing?.name}</span>
-      </div>
-      {sellers.length > 0 && <div><label style={{ fontSize: 11, fontWeight: 600, color: C.g, fontFamily: F }}>Asignar a vendedor (para lo que importes)</label><select value={importSeller} onChange={e => setImportSeller(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${importSeller ? C.g : C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6, cursor: "pointer" }}><option value="">— Sin asignar —</option>{sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
-      {loading ? <p style={{ color: C.acc, fontSize: 13 }}>Leyendo carpeta...</p>
-        : sheets.length === 0 ? <p style={{ color: C.td, fontSize: 12 }}>No hay tablas (Google Sheets) en esta carpeta.</p>
-          : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{sheets.map(sh => (
-            <div key={sh.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.bg, borderRadius: 12, border: `1px solid ${C.b}` }}>
-              <span style={{ fontSize: 16 }}>📊</span>
-              <span style={{ flex: 1, fontSize: 13, color: C.tx }}>{sh.name}</span>
-              <Btn onClick={() => importSheet(sh)} sz="sm" disabled={importingId === sh.id}>{importingId === sh.id ? "Importando..." : "Importar"}</Btn>
-            </div>
-          ))}</div>}
-    </div>}
+      {/* Carpetas guardadas (acceso rápido) */}
+      {folders.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {folders.map(f => <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 4, background: C.s2, borderRadius: 8, border: `1px solid ${C.b}`, padding: "4px 4px 4px 10px" }}>
+          <button onClick={() => { setLink(`https://drive.google.com/drive/folders/${f.drive_folder_id}`); browse(f.drive_folder_id, f.name); }} style={{ background: "none", border: "none", color: C.bl, fontSize: 11, cursor: "pointer", fontFamily: F }}>📁 {f.name}</button>
+          <button onClick={() => delFolder(f.id)} style={{ background: "none", border: "none", color: C.td, fontSize: 10, cursor: "pointer" }}>✕</button>
+        </div>)}
+      </div>}
+
+      {/* Tablas encontradas */}
+      {sheets !== null && <div style={{ borderTop: `1px solid ${C.b}`, paddingTop: 12 }}>
+        {loading ? <p style={{ color: C.acc, fontSize: 13 }}>Leyendo carpeta...</p>
+          : sheets.length === 0 ? <p style={{ color: C.td, fontSize: 12 }}>No hay tablas en esta carpeta.</p>
+            : <>
+              <div style={{ fontSize: 11, color: C.tm, marginBottom: 8 }}>{browsedName ? `📁 ${browsedName} · ` : ""}{sheets.length} tabla{sheets.length !== 1 ? "s" : ""}:</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{sheets.map(sh => {
+                const done = importedIds.includes(sh.id);
+                return <div key={sh.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.bg, borderRadius: 12, border: `1px solid ${done ? C.g + "40" : C.b}` }}>
+                  <span style={{ fontSize: 16 }}>📊</span>
+                  <span style={{ flex: 1, fontSize: 13, color: C.tx }}>{sh.name}</span>
+                  {done ? <span style={{ fontSize: 12, color: C.g, fontWeight: 600 }}>✓ Importado</span>
+                    : <Btn onClick={() => importSheet(sh)} sz="sm" disabled={importingId === sh.id}>{importingId === sh.id ? "Importando..." : "Importar"}</Btn>}
+                </div>;
+              })}</div>
+            </>}
+      </div>}
+
+      {/* Guardar carpeta para después (opcional) */}
+      {link && <div style={{ borderTop: `1px solid ${C.b}`, paddingTop: 12, display: "flex", gap: 8, alignItems: "flex-end" }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 10, color: C.td, fontFamily: F }}>Guardar carpeta para acceso rápido (opcional)</label>
+          <input value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="Ej: St. Catharines - Automotriz" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "8px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", marginTop: 4 }} />
+        </div>
+        <Btn onClick={saveFolder} v="secondary" sz="sm" disabled={!saveName}>Guardar</Btn>
+      </div>}
+    </div>
   </ModalWrap>;
 }
