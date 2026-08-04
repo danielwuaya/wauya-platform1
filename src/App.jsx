@@ -111,6 +111,7 @@ function AppInner(){
   const[selectedClients,setSelectedClients]=useState([]);
   const[dashTab,setDashTab]=useState("general");
   const[coldLeads,setColdLeads]=useState([]);
+  const[leadFolders,setLeadFolders]=useState([]);
 
   const safeQuery=async(table,opts={})=>{try{let q=supabase.from(table).select("*");if(opts.order)q=q.order(opts.order,{ascending:opts.asc??false});if(opts.limit)q=q.limit(opts.limit);const{data}=await q;return data||[]}catch{return[]}};
   const loadAll=useCallback(async()=>{
@@ -129,6 +130,7 @@ function AppInner(){
     setExpenseRecords(await safeQuery("expenses",{order:"created_at"}));
     setIncomeRecords(await safeQuery("income_records",{order:"created_at"}));
     setColdLeads(await safeQuery("cold_leads",{order:"created_at"}));
+    setLeadFolders(await safeQuery("lead_folders",{order:"created_at"}));
   },[]);
   useEffect(()=>{
     // Global error handler - prevents white screen
@@ -497,7 +499,7 @@ function AppInner(){
       {/* PIPELINE */}
       {view==="pipeline"&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Pipeline</h1><div style={{display:"flex",gap:8}}><Btn onClick={()=>setModal("sync_drive")} v="secondary" icon="sync" sz={isMobile?"sm":"md"}>Sync</Btn><Btn onClick={()=>setModal("add_prospect")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div></div><div style={{overflowX:"auto"}}><Pipeline prospects={prospects} onMove={moveProspect} onSelect={id=>{setSelId(id);setView("prospects")}}/></div></div>}
 
-      {view==="coldleads"&&<ColdLeads leads={coldLeads} employees={employees} currentUser={user} onReload={loadAll} onConvert={()=>setView("pipeline")} toast={showToast}/>}
+      {view==="coldleads"&&<ColdLeads leads={coldLeads} employees={employees} currentUser={user} folders={leadFolders} onReload={loadAll} onConvert={()=>setView("pipeline")} toast={showToast}/>}
 
       {/* PROSPECTS */}
       {view==="prospects"&&!selId&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}><h1 style={{fontFamily:D,fontSize:isMobile?20:24,fontWeight:700,color:C.tx}}>Prospectos</h1><div style={{display:"flex",gap:8}}><Btn onClick={()=>setModal("sync_drive")} v="secondary" icon="sync" sz={isMobile?"sm":"md"}>Sync</Btn><Btn onClick={()=>setModal("add_prospect")} icon="plus" sz={isMobile?"sm":"md"}>Nuevo</Btn></div></div><div style={{position:"relative",marginBottom:18}}><div style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.td}}><Ic n="srch" sz={15}/></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{width:"100%",background:C.bg,border:`1px solid ${C.b}`,borderRadius:10,padding:"9px 12px 9px 34px",color:C.tx,fontSize:12,fontFamily:F,outline:"none"}}/></div>{filt(prospects).length===0?<Empty icon="🎯" title="Sin prospectos" sub="Crea tu primer prospecto o sincroniza desde Drive" action={()=>setModal("add_prospect")} actionLabel="+ Nuevo prospecto"/>:<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>{filt(prospects).map(p=><Card key={p.id} hover onClick={()=>setSelId(p.id)}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontFamily:D,fontSize:14,fontWeight:600,color:C.tx}}>{p.company||p.name}</div><div style={{fontSize:11,color:C.tm,marginTop:1}}>{p.name}</div></div>{p.drive_folder_id&&<span style={{fontSize:10,color:C.g}}>📁</span>}</div>{p.email&&<div style={{fontSize:11,color:C.td}}>✉ {p.email}</div>}</Card>)}</div>}</div>}
