@@ -13,17 +13,63 @@ const OUTBOUND_STATUS = [
   { value: "descartado", label: "Descartado", color: "#4A5568", icon: "✕" },
 ];
 
+// Lee un Google Sheet de leads y devuelve las filas parseadas
+async function readLeadsSheet(sheetId, batch, assignSeller) {
+  const tabs = ["Leads", "Hoja1", "Sheet1", "Prospeccion"];
+  let data = null, lastErr = "";
+  for (const tab of tabs) {
+    try {
+      const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=${encodeURIComponent(tab)}!A1:AZ200`);
+      const j = await r.json();
+      if (j.error) { lastErr = j.error; continue; }
+      if (Array.isArray(j) && j.length > 2) { data = j; break; }
+    } catch (e) { lastErr = e.message; }
+  }
+  if (!data) throw new Error(lastErr || "No se pudo leer. Verifica que sea Google Sheet compartido.");
+  let headerIdx = data.findIndex(row => row.some(c => c && /empresa|company/i.test(String(c))));
+  if (headerIdx === -1) headerIdx = 0;
+  const headers = data[headerIdx].map(h => String(h || "").toLowerCase().trim());
+  const col = (...names) => headers.findIndex(h => names.some(n => h.includes(n)));
+  const idx = {
+    lead_id: col("lead id", "id"), company: col("empresa", "company"), industry: col("industria", "industry"),
+    city: col("ciudad", "city"), address: col("dirección", "address"), phone: col("teléfono", "phone"),
+    email: col("email"), instagram: col("instagram"), facebook: col("facebook"), linkedin: col("linkedin empresa"),
+    owner: col("propietario", "gerente", "owner"), role: col("cargo", "role"),
+    website: col("estado de la página", "website"), problem: col("problema detectado", "problem"),
+    opportunity: col("oportunidad"), solution: col("solución web", "solution"),
+    priority: col("prioridad"), score: col("lead score", "score"),
+    message: col("mensaje inicial"), obs: col("observaciones"),
+    email_subject: col("asunto de email", "asunto"), email_body: col("email inicial"),
+    followup_1: col("seguimiento 1"), followup_2: col("seguimiento 2"),
+  };
+  return data.slice(headerIdx + 1).filter(r => r[idx.company]).map(r => ({
+    lead_id: r[idx.lead_id] || "", company: r[idx.company] || "", industry: r[idx.industry] || "",
+    city: r[idx.city] || "", address: r[idx.address] || "", phone: String(r[idx.phone] || ""),
+    email: r[idx.email] || "", instagram: r[idx.instagram] || "", facebook: r[idx.facebook] || "",
+    linkedin: r[idx.linkedin] || "", owner_name: r[idx.owner] || "", owner_role: r[idx.role] || "",
+    website_status: r[idx.website] || "", problem: r[idx.problem] || "", opportunity: r[idx.opportunity] || "",
+    recommended_solution: r[idx.solution] || "", priority: r[idx.priority] || "",
+    lead_score: parseFloat(r[idx.score]) || 0, initial_message: r[idx.message] || "",
+    observations: r[idx.obs] || "", batch: batch || "Lote sin nombre", outbound_status: "sin_contactar",
+    email_subject: r[idx.email_subject] || "", email_body: r[idx.email_body] || "",
+    followup_1: r[idx.followup_1] || "", followup_2: r[idx.followup_2] || "",
+    assigned_seller: assignSeller || null,
+  }));
+}
+
 function Btn({ children, onClick, v = "primary", sz = "md", disabled, style: sx }) { const b = { display: "inline-flex", alignItems: "center", gap: 7, border: "none", cursor: disabled ? "not-allowed" : "pointer", fontFamily: F, fontWeight: 600, borderRadius: 10, transition: "all .2s", opacity: disabled ? .35 : 1, whiteSpace: "nowrap", fontSize: sz === "sm" ? 11 : 13, padding: sz === "sm" ? "6px 12px" : "9px 18px" }; const vs = { primary: { background: `linear-gradient(135deg,${C.acc},#D4A00E)`, color: "#060B18" }, secondary: { background: C.s2, color: C.tx, border: `1px solid ${C.b}` }, ghost: { background: "transparent", color: C.tm } }; return <button onClick={onClick} disabled={disabled} style={{ ...b, ...vs[v], ...sx }}>{children}</button>; }
 function Card({ children, style: sx, onClick }) { return <div onClick={onClick} style={{ background: `${C.s}e8`, borderRadius: 14, border: `1px solid ${C.b}80`, padding: 18, cursor: onClick ? "pointer" : "default", transition: "all .2s", ...sx }}>{children}</div>; }
 function ModalWrap({ title, onClose, children, w = 560 }) { return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(16px)" }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}><div style={{ background: `linear-gradient(160deg,${C.s}f5,${C.bg}f0)`, borderRadius: 20, border: `1px solid ${C.b}`, width: "92%", maxWidth: w, maxHeight: "88vh", overflow: "auto", animation: "modalIn .25s", boxShadow: "0 24px 80px rgba(0,0,0,.5)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", borderBottom: `1px solid ${C.b}60`, position: "sticky", top: 0, background: `${C.s}f5`, zIndex: 1 }}><h3 style={{ fontFamily: D, fontSize: 17, fontWeight: 600, color: C.tx }}>{title}</h3><button onClick={onClose} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 10, width: 30, height: 30, color: C.tm, cursor: "pointer", fontSize: 13 }}>✕</button></div><div style={{ padding: 22 }}>{children}</div></div></div>; }
 
-export default function ColdLeads({ leads = [], employees = [], currentUser = null, onReload, onConvert, toast }) {
+export default function ColdLeads({ leads = [], employees = [], currentUser = null, folders = [], onReload, onConvert, toast }) {
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
   const [selBatch, setSelBatch] = useState("todos");
   const [filterChannel, setFilterChannel] = useState("todos");
   const [filterSeller, setFilterSeller] = useState("todos");
+  const [filterCity, setFilterCity] = useState("todos");
+  const [filterIndustry, setFilterIndustry] = useState("todos");
   const showToast = toast || (() => {});
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
@@ -33,6 +79,8 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
   const visibleLeads = isSeller ? leads.filter(l => l.assigned_seller === currentUser.id) : leads;
 
   const batches = useMemo(() => [...new Set(visibleLeads.map(l => l.batch).filter(Boolean))], [visibleLeads]);
+  const cities = useMemo(() => [...new Set(visibleLeads.map(l => l.city).filter(Boolean))].sort(), [visibleLeads]);
+  const industries = useMemo(() => [...new Set(visibleLeads.map(l => l.industry).filter(Boolean))].sort(), [visibleLeads]);
 
   const stats = useMemo(() => {
     const byStatus = {};
@@ -57,6 +105,8 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
     if (filterStatus !== "todos" && l.outbound_status !== filterStatus) return false;
     if (selBatch !== "todos" && l.batch !== selBatch) return false;
     if (filterSeller !== "todos" && l.assigned_seller !== filterSeller) return false;
+    if (filterCity !== "todos" && l.city !== filterCity) return false;
+    if (filterIndustry !== "todos" && l.industry !== filterIndustry) return false;
     if (search && !(l.company + l.city + l.industry + l.owner_name).toLowerCase().includes(search.toLowerCase())) return false;
     const hasIG = l.instagram && l.instagram.startsWith("http");
     const hasFB = l.facebook && l.facebook.startsWith("http");
@@ -74,7 +124,10 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
           <h1 style={{ fontFamily: D, fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.tx, letterSpacing: "-.02em" }}>{isSeller ? "Mi CRM" : "Leads Fríos"}</h1>
           <p style={{ fontSize: 12, color: C.td }}>{isSeller ? "Tu pipeline de prospección" : `Prospección outbound · ${visibleLeads.length} leads`}</p>
         </div>
-        {!isSeller && <Btn onClick={() => setModal({ type: "import" })}>+ Importar lote</Btn>}
+        {!isSeller && <div style={{ display: "flex", gap: 6 }}>
+          <Btn onClick={() => setModal({ type: "folders" })} v="secondary">📁 Carpetas</Btn>
+          <Btn onClick={() => setModal({ type: "import" })}>+ Importar lote</Btn>
+        </div>}
       </div>
 
       {/* Métricas por vendedor (solo admin) */}
@@ -120,6 +173,8 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
           <option value="email">Con Email</option>
           <option value="sin_social">Sin redes (solo email/tel)</option>
         </select>
+        {cities.length > 1 && <select value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}><option value="todos">Todas las ciudades</option>{cities.map(c => <option key={c} value={c}>{c}</option>)}</select>}
+        {industries.length > 1 && <select value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}><option value="todos">Todas las industrias</option>{industries.map(i => <option key={i} value={i}>{i}</option>)}</select>}
         {filterStatus !== "todos" && <Btn onClick={() => setFilterStatus("todos")} v="ghost" sz="sm">✕ Ver todos</Btn>}
       </div>
 
@@ -184,6 +239,7 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
       </div>
 
       {modal?.type === "import" && <ImportModal sellers={sellers} onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
+      {modal?.type === "folders" && <FoldersModal folders={folders} sellers={sellers} onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
       {modal?.type === "detail" && <DetailModal lead={modal.lead} onClose={() => setModal(null)} onSaveNotes={updNotes} onCopied={() => showToast("Copiado")} />}
       {modal?.type === "convert" && <ConvertModal lead={modal.lead} onClose={() => setModal(null)} onConvert={onConvert} showToast={showToast} onReload={onReload} />}
     </div>
@@ -381,5 +437,101 @@ function ConvertModal({ lead, onClose, onConvert, showToast, onReload }) {
         <Btn onClick={doConvert} disabled={!selling}>Crear prospecto →</Btn>
       </div>
     </div>
+  </ModalWrap>;
+}
+
+function FoldersModal({ folders = [], sellers = [], onClose, onReload, showToast }) {
+  const [view, setView] = useState("list"); // list | add | browse
+  const [name, setName] = useState("");
+  const [link, setLink] = useState("");
+  const [browsing, setBrowsing] = useState(null); // folder being browsed
+  const [sheets, setSheets] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [importSeller, setImportSeller] = useState("");
+  const [importingId, setImportingId] = useState(null);
+
+  const addFolder = async () => {
+    if (!name || !link) return;
+    let fid = link;
+    const m = link.match(/folders\/([a-zA-Z0-9_-]+)/);
+    if (m) fid = m[1];
+    try {
+      const { error } = await supabase.from("lead_folders").insert({ name, drive_folder_id: fid });
+      if (error) { showToast("Error: " + error.message, "error"); return; }
+      onReload(); setName(""); setLink(""); setView("list"); showToast("Carpeta agregada");
+    } catch (e) { showToast("Error: " + e.message, "error"); }
+  };
+
+  const delFolder = async (id) => {
+    if (!confirm("¿Eliminar esta carpeta? (No borra nada de Drive)")) return;
+    try { await supabase.from("lead_folders").delete().eq("id", id); onReload(); showToast("Carpeta eliminada"); } catch {}
+  };
+
+  const browseFolder = async (folder) => {
+    setBrowsing(folder); setView("browse"); setLoading(true); setSheets([]);
+    try {
+      const r = await fetch(`/api/drive?action=list&folderId=${folder.drive_folder_id}`);
+      const j = await r.json();
+      const files = Array.isArray(j.files) ? j.files : Array.isArray(j) ? j : [];
+      // Solo Google Sheets
+      const onlySheets = files.filter(f => f.mimeType && f.mimeType.includes("spreadsheet"));
+      setSheets(onlySheets.length > 0 ? onlySheets : files);
+    } catch (e) { showToast("Error leyendo carpeta", "error"); }
+    setLoading(false);
+  };
+
+  const importSheet = async (sheet) => {
+    setImportingId(sheet.id);
+    try {
+      const rows = await readLeadsSheet(sheet.id, sheet.name, importSeller || null);
+      if (rows.length === 0) { showToast("No se encontraron leads en " + sheet.name, "error"); setImportingId(null); return; }
+      const { error } = await supabase.from("cold_leads").insert(rows);
+      if (error) { showToast("Error: " + error.message, "error"); setImportingId(null); return; }
+      onReload(); showToast(`${rows.length} leads importados de "${sheet.name}"`);
+    } catch (e) { showToast("Error: " + e.message, "error"); }
+    setImportingId(null);
+  };
+
+  return <ModalWrap title="📁 Carpetas de leads" onClose={onClose} w={600}>
+    {view === "list" && <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <p style={{ fontSize: 12, color: C.tm, lineHeight: 1.6 }}>Organiza tus carpetas de Drive por ciudad e industria. La plataforma lee cada carpeta y te muestra las tablas para importar con un click.</p>
+      {folders.length === 0 ? <div style={{ textAlign: "center", padding: 24, color: C.td, fontSize: 12 }}>Sin carpetas. Agrega tu primera carpeta de Drive.</div>
+        : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{folders.map(f => (
+          <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.bg, borderRadius: 12, border: `1px solid ${C.b}` }}>
+            <span style={{ fontSize: 18 }}>📁</span>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>{f.name}</div></div>
+            <Btn onClick={() => browseFolder(f)} sz="sm">Ver tablas</Btn>
+            <button onClick={() => delFolder(f.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.r, fontSize: 12 }}>🗑️</button>
+          </div>
+        ))}</div>}
+      <Btn onClick={() => setView("add")} v="secondary">+ Agregar carpeta</Btn>
+    </div>}
+
+    {view === "add" && <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Nombre (ciudad - industria)</label><input value={name} onChange={e => setName(e.target.value)} placeholder="Ej: St. Catharines - Automotriz" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
+      <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Link de la carpeta de Drive</label><input value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
+      <div style={{ background: C.blBg, borderRadius: 10, padding: 12, border: `1px solid ${C.bl}25`, fontSize: 11, color: C.tm, lineHeight: 1.6 }}>La carpeta debe estar compartida como "Cualquiera con el enlace → Lector". Adentro pon tus Google Sheets de leads (cada uno con pestaña "Leads").</div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Btn onClick={() => setView("list")} v="ghost">Volver</Btn>
+        <Btn onClick={addFolder} disabled={!name || !link}>Guardar carpeta</Btn>
+      </div>
+    </div>}
+
+    {view === "browse" && <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={() => setView("list")} style={{ background: C.s2, border: `1px solid ${C.b}`, borderRadius: 8, padding: "4px 10px", color: C.tm, fontSize: 11, cursor: "pointer", fontFamily: F }}>← Carpetas</button>
+        <span style={{ fontSize: 14, fontWeight: 600, color: C.tx }}>📁 {browsing?.name}</span>
+      </div>
+      {sellers.length > 0 && <div><label style={{ fontSize: 11, fontWeight: 600, color: C.g, fontFamily: F }}>Asignar a vendedor (para lo que importes)</label><select value={importSeller} onChange={e => setImportSeller(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${importSeller ? C.g : C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6, cursor: "pointer" }}><option value="">— Sin asignar —</option>{sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
+      {loading ? <p style={{ color: C.acc, fontSize: 13 }}>Leyendo carpeta...</p>
+        : sheets.length === 0 ? <p style={{ color: C.td, fontSize: 12 }}>No hay tablas (Google Sheets) en esta carpeta.</p>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{sheets.map(sh => (
+            <div key={sh.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.bg, borderRadius: 12, border: `1px solid ${C.b}` }}>
+              <span style={{ fontSize: 16 }}>📊</span>
+              <span style={{ flex: 1, fontSize: 13, color: C.tx }}>{sh.name}</span>
+              <Btn onClick={() => importSheet(sh)} sz="sm" disabled={importingId === sh.id}>{importingId === sh.id ? "Importando..." : "Importar"}</Btn>
+            </div>
+          ))}</div>}
+    </div>}
   </ModalWrap>;
 }
