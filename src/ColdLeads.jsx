@@ -35,21 +35,33 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     } catch (e) { lastErr = e.message; }
   }
   if (!data) throw new Error(lastErr || "No se pudo leer. Verifica que sea Google Sheet compartido.");
-  let headerIdx = data.findIndex(row => row.some(c => c && /empresa|company/i.test(String(c))));
+  let headerIdx = data.findIndex(row => row.some(c => c && /empresa|company|médico|medico/i.test(String(c))));
   if (headerIdx === -1) headerIdx = 0;
   const headers = data[headerIdx].map(h => String(h || "").toLowerCase().trim());
   const col = (...names) => headers.findIndex(h => names.some(n => h.includes(n)));
   const idx = {
-    lead_id: col("lead id", "id"), company: col("empresa", "company"), industry: col("industria", "industry"),
-    city: col("ciudad", "city"), address: col("dirección", "address"), phone: col("teléfono", "phone"),
-    email: col("email"), instagram: col("instagram"), facebook: col("facebook"), linkedin: col("linkedin empresa"),
-    owner: col("propietario", "gerente", "owner"), role: col("cargo", "role"),
-    website: col("estado de la página", "website"), problem: col("problema detectado", "problem"),
-    opportunity: col("oportunidad"), solution: col("solución web", "solution"),
+    lead_id: col("lead id", "orden", "id"),
+    company: col("empresa", "company", "médico", "medico", "nombre"),
+    industry: col("industria", "industry", "especialidad", "enfoque"),
+    city: col("ciudad", "city"),
+    address: col("dirección", "direccion", "address"),
+    phone: col("teléfono", "telefono", "phone", "whatsapp"),
+    email: col("email", "correo"),
+    instagram: col("instagram"), facebook: col("facebook"), linkedin: col("linkedin empresa"),
+    owner: col("propietario", "gerente", "owner", "responsable"),
+    role: col("cargo", "role"),
+    website: col("estado website", "estado de la página", "website", "estado web"),
+    problem: col("problema detectado", "problem", "pain point", "diagnóstico comercial", "diagnostico comercial"),
+    opportunity: col("oportunidad", "tipo de oportunidad", "ángulo de venta", "angulo de venta"),
+    solution: col("solución web", "solucion web", "solution", "servicio recomendado"),
     priority: col("prioridad"), score: col("lead score", "score"),
-    message: col("mensaje inicial"), obs: col("observaciones"),
-    email_subject: col("asunto de email", "asunto"), email_body: col("email inicial"),
+    message: col("mensaje inicial dm", "mensaje inicial", "mensaje whatsapp"),
+    obs: col("observaciones", "resultado"),
+    email_subject: col("asunto de email", "asunto"),
+    email_body: col("email inicial", "respuesta si muestra interés", "respuesta si muestra interes"),
     followup_1: col("seguimiento 1"), followup_2: col("seguimiento 2"),
+    whatsapp: col("whatsapp"), rating: col("rating google", "rating"),
+    whatsapp_msg: col("mensaje whatsapp"),
   };
   return data.slice(headerIdx + 1).filter(r => r[idx.company]).map(r => ({
     lead_id: r[idx.lead_id] || "", company: r[idx.company] || "", industry: r[idx.industry] || "",
@@ -62,6 +74,8 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     observations: r[idx.obs] || "", batch: batch || "Lote sin nombre", outbound_status: "sin_contactar",
     email_subject: r[idx.email_subject] || "", email_body: r[idx.email_body] || "",
     followup_1: r[idx.followup_1] || "", followup_2: r[idx.followup_2] || "",
+    whatsapp: String(r[idx.whatsapp] || ""), rating: String(r[idx.rating] || ""),
+    whatsapp_message: r[idx.whatsapp_msg] || "",
     assigned_seller: assignSeller || null,
   }));
 }
@@ -218,8 +232,10 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
                     const hasFB = lead.facebook && lead.facebook.startsWith("http");
                     const hasEmail = lead.email && lead.email.includes("@");
                     const hasPhone = lead.phone && lead.phone.length > 4;
+                    const hasWA = lead.whatsapp && lead.whatsapp.length > 4;
                     const chip = (ok, label, color) => <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: ok ? color + "18" : C.b + "40", color: ok ? color : C.td, border: `1px solid ${ok ? color + "30" : "transparent"}` }}>{ok ? "✓" : "✕"} {label}</span>;
                     return <>
+                      {hasWA && chip(true, "WhatsApp", "#25D366")}
                       {chip(hasIG, "Instagram", "#E1306C")}
                       {chip(hasFB, "Facebook", "#1877F2")}
                       {chip(hasEmail, "Email", C.acc)}
@@ -370,10 +386,12 @@ function DetailModal({ lead, onClose, onSaveNotes, onCopied }) {
     <div style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Cómo contactar</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {lead.whatsapp && lead.whatsapp.length > 4 && <a href={`https://wa.me/${lead.whatsapp.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#25D366", textDecoration: "none" }}>💬 WhatsApp: {lead.whatsapp} ↗</a>}
         {lead.email && lead.email.includes("@") ? <a href={`mailto:${lead.email}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.acc, textDecoration: "none" }}>✉️ {lead.email}</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
         {lead.phone && lead.phone.length > 4 ? <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.g }}>📞 {lead.phone}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin teléfono</div>}
         {lead.instagram && lead.instagram.startsWith("http") ? <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#E1306C", textDecoration: "none" }}>📷 Instagram ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Instagram</div>}
         {lead.facebook && lead.facebook.startsWith("http") ? <a href={lead.facebook} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#1877F2", textDecoration: "none" }}>📘 Facebook ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Facebook</div>}
+        {lead.rating && <div style={{ fontSize: 12, color: C.w }}>⭐ Rating Google: {lead.rating}</div>}
       </div>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
@@ -385,7 +403,7 @@ function DetailModal({ lead, onClose, onSaveNotes, onCopied }) {
     {field("Oportunidad estratégica", lead.opportunity)}
     {field("Solución recomendada", lead.recommended_solution)}
     {/* MENSAJES LISTOS PARA COPIAR */}
-    {(lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1) && <div style={{ marginBottom: 16 }}>
+    {(lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.acc, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>📋 Mensajes listos para enviar</div>
       {/* Email */}
       {(lead.email_subject || lead.email_body) && <div style={{ background: C.acc + "0A", border: `1px solid ${C.acc}30`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
@@ -405,6 +423,7 @@ function DetailModal({ lead, onClose, onSaveNotes, onCopied }) {
       </div>}
       {/* Mensaje inicial IG/DM */}
       {lead.initial_message && <MsgBlock label="📷 Mensaje inicial (Instagram/DM)" text={lead.initial_message} onCopied={onCopied} />}
+      {lead.whatsapp_message && <MsgBlock label="💬 Mensaje WhatsApp" text={lead.whatsapp_message} onCopied={onCopied} />}
       {lead.followup_1 && <MsgBlock label="🔁 Seguimiento 1" text={lead.followup_1} onCopied={onCopied} />}
       {lead.followup_2 && <MsgBlock label="🔁 Seguimiento 2" text={lead.followup_2} onCopied={onCopied} />}
     </div>}
