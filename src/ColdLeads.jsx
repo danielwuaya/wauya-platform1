@@ -35,36 +35,46 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     } catch (e) { lastErr = e.message; }
   }
   if (!data) throw new Error(lastErr || "No se pudo leer. Verifica que sea Google Sheet compartido.");
-  let headerIdx = data.findIndex(row => row.some(c => c && /empresa|company|médico|medico/i.test(String(c))));
+  let headerIdx = data.findIndex(row => row.some(c => c && /empresa|company|médico|medico|nombre del|razón social|razon social/i.test(String(c))));
+  // Si no encuentra por nombre, busca la fila que tenga más celdas llenas (probablemente el header)
+  if (headerIdx === -1) {
+    let maxCells = 0;
+    data.forEach((row, i) => { const filled = row.filter(c => c && String(c).trim()).length; if (filled > maxCells && filled >= 4) { maxCells = filled; headerIdx = i; } });
+  }
   if (headerIdx === -1) headerIdx = 0;
   const headers = data[headerIdx].map(h => String(h || "").toLowerCase().trim());
   const col = (...names) => headers.findIndex(h => names.some(n => h.includes(n)));
   const idx = {
-    lead_id: col("lead id", "orden", "id"),
-    company: col("empresa", "company", "médico", "medico", "nombre"),
-    industry: col("industria", "industry", "especialidad", "enfoque"),
+    lead_id: col("orden", "lead id"),
+    company: col("médico", "medico", "empresa", "company", "nombre del", "razón social", "razon social", "negocio", "clínica", "clinica", "consultorio", "doctor"),
+    industry: col("especialidad", "enfoque", "industria", "industry"),
     city: col("ciudad", "city"),
     address: col("dirección", "direccion", "address"),
-    phone: col("teléfono", "telefono", "phone", "whatsapp"),
-    email: col("email", "correo"),
-    instagram: col("instagram"), facebook: col("facebook"), linkedin: col("linkedin empresa"),
-    owner: col("propietario", "gerente", "owner", "responsable"),
+    phone: col("teléfono", "telefono", "phone"),
+    email: col("email", "correo electrónico", "correo"),
+    instagram: col("instagram"), facebook: col("facebook"), linkedin: col("linkedin"),
+    owner: col("responsable", "propietario", "gerente", "owner"),
     role: col("cargo", "role"),
-    website: col("estado website", "estado de la página", "website", "estado web"),
-    problem: col("problema detectado", "problem", "pain point", "diagnóstico comercial", "diagnostico comercial"),
-    opportunity: col("oportunidad", "tipo de oportunidad", "ángulo de venta", "angulo de venta"),
-    solution: col("solución web", "solucion web", "solution", "servicio recomendado"),
+    website: col("estado website", "estado web", "estado de la página", "website"),
+    problem: col("pain point", "diagnóstico comercial", "diagnostico comercial", "problema detectado", "problem"),
+    opportunity: col("tipo de oportunidad", "ángulo de venta", "angulo de venta", "oportunidad"),
+    solution: col("servicio recomendado", "solución web", "solucion web", "solution"),
     priority: col("prioridad"), score: col("lead score", "score"),
-    message: col("mensaje inicial dm", "mensaje inicial", "mensaje whatsapp"),
+    message: col("mensaje inicial dm", "mensaje inicial"),
     obs: col("observaciones", "resultado"),
     email_subject: col("asunto de email", "asunto"),
-    email_body: col("email inicial", "respuesta si muestra interés", "respuesta si muestra interes"),
+    email_body: col("respuesta si muestra interés", "respuesta si muestra interes", "email inicial"),
     followup_1: col("seguimiento 1"), followup_2: col("seguimiento 2"),
     whatsapp: col("whatsapp"), rating: col("rating google", "rating"),
     whatsapp_msg: col("mensaje whatsapp"),
+    website_url: col("website", "sitio web", "página web", "pagina web"),
+    maps: col("google maps", "maps"),
+    contact_status: col("estado de contacto", "estado contacto"),
   };
-  return data.slice(headerIdx + 1).filter(r => r[idx.company]).map(r => ({
-    lead_id: r[idx.lead_id] || "", company: r[idx.company] || "", industry: r[idx.industry] || "",
+  // Si no se encontró la columna del nombre, usa la primera columna
+  const companyIdx = idx.company >= 0 ? idx.company : 0;
+  const result = data.slice(headerIdx + 1).filter(r => r[companyIdx] && String(r[companyIdx]).trim()).map(r => ({
+    lead_id: r[idx.lead_id] || "", company: r[companyIdx] || "", industry: r[idx.industry] || "",
     city: r[idx.city] || "", address: r[idx.address] || "", phone: String(r[idx.phone] || ""),
     email: r[idx.email] || "", instagram: r[idx.instagram] || "", facebook: r[idx.facebook] || "",
     linkedin: r[idx.linkedin] || "", owner_name: r[idx.owner] || "", owner_role: r[idx.role] || "",
@@ -78,6 +88,7 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     whatsapp_message: r[idx.whatsapp_msg] || "",
     assigned_seller: assignSeller || null,
   }));
+  return result;
 }
 
 function Btn({ children, onClick, v = "primary", sz = "md", disabled, style: sx }) { const b = { display: "inline-flex", alignItems: "center", gap: 7, border: "none", cursor: disabled ? "not-allowed" : "pointer", fontFamily: F, fontWeight: 600, borderRadius: 10, transition: "all .2s", opacity: disabled ? .35 : 1, whiteSpace: "nowrap", fontSize: sz === "sm" ? 11 : 13, padding: sz === "sm" ? "6px 12px" : "9px 18px" }; const vs = { primary: { background: `linear-gradient(135deg,${C.acc},#D4A00E)`, color: "#060B18" }, secondary: { background: C.s2, color: C.tx, border: `1px solid ${C.b}` }, ghost: { background: "transparent", color: C.tm } }; return <button onClick={onClick} disabled={disabled} style={{ ...b, ...vs[v], ...sx }}>{children}</button>; }
@@ -289,51 +300,21 @@ function ImportModal({ sellers = [], onClose, onReload, showToast }) {
 
   const readSheet = async () => {
     if (!link) return;
+    // Si pegaron un link de carpeta por error
+    if (link.includes("/drive/folders/") || link.includes("/folders/")) {
+      showToast('Ese es un link de CARPETA. Usa el botón "📁 Carpetas" para importar desde carpetas, o pega el link de un Google Sheet individual.', "error");
+      return;
+    }
     setLoading(true); setPreview(null);
     const m = link.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
     const sheetId = m ? m[1] : link;
-    const tabs = ["Leads", "Hoja1", "Sheet1", "Prospeccion"];
-    let data = null, lastErr = "";
-    for (const tab of tabs) {
-      try {
-        const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=${encodeURIComponent(tab)}!A1:AZ200`);
-        const j = await r.json();
-        if (j.error) { lastErr = j.error; continue; }
-        if (Array.isArray(j) && j.length > 2) { data = j; break; }
-      } catch (e) { lastErr = e.message; }
+    try {
+      const rows = await readLeadsSheet(sheetId, batch, assignSeller || null);
+      if (rows.length === 0) { showToast("No se encontraron leads. Revisa que la pestaña tenga datos y una columna Empresa o Médico.", "error"); setLoading(false); return; }
+      setPreview(rows);
+    } catch (e) {
+      showToast("No se pudo leer: " + e.message, "error");
     }
-    if (!data) { showToast("No se pudo leer: " + (lastErr || "verifica el link y que sea Google Sheet compartido"), "error"); setLoading(false); return; }
-    // Find header row (contains "Empresa" or "Company")
-    let headerIdx = data.findIndex(row => row.some(c => c && /empresa|company/i.test(String(c))));
-    if (headerIdx === -1) headerIdx = 0;
-    const headers = data[headerIdx].map(h => String(h || "").toLowerCase().trim());
-    const col = (...names) => headers.findIndex(h => names.some(n => h.includes(n)));
-    const idx = {
-      lead_id: col("lead id", "id"), company: col("empresa", "company"), industry: col("industria", "industry"),
-      city: col("ciudad", "city"), address: col("dirección", "address"), phone: col("teléfono", "phone"),
-      email: col("email"), instagram: col("instagram"), facebook: col("facebook"), linkedin: col("linkedin empresa"),
-      owner: col("propietario", "gerente", "owner"), role: col("cargo", "role"),
-      website: col("estado de la página", "website"), problem: col("problema detectado", "problem"),
-      opportunity: col("oportunidad"), solution: col("solución web", "solution"),
-      priority: col("prioridad"), score: col("lead score", "score"),
-      message: col("mensaje inicial"), obs: col("observaciones"),
-      email_subject: col("asunto de email", "asunto"), email_body: col("email inicial"),
-      followup_1: col("seguimiento 1"), followup_2: col("seguimiento 2"),
-    };
-    const rows = data.slice(headerIdx + 1).filter(r => r[idx.company]).map(r => ({
-      lead_id: r[idx.lead_id] || "", company: r[idx.company] || "", industry: r[idx.industry] || "",
-      city: r[idx.city] || "", address: r[idx.address] || "", phone: String(r[idx.phone] || ""),
-      email: r[idx.email] || "", instagram: r[idx.instagram] || "", facebook: r[idx.facebook] || "",
-      linkedin: r[idx.linkedin] || "", owner_name: r[idx.owner] || "", owner_role: r[idx.role] || "",
-      website_status: r[idx.website] || "", problem: r[idx.problem] || "", opportunity: r[idx.opportunity] || "",
-      recommended_solution: r[idx.solution] || "", priority: r[idx.priority] || "",
-      lead_score: parseFloat(r[idx.score]) || 0, initial_message: r[idx.message] || "",
-      observations: r[idx.obs] || "", batch: batch || "Lote sin nombre", outbound_status: "sin_contactar",
-      email_subject: r[idx.email_subject] || "", email_body: r[idx.email_body] || "",
-      followup_1: r[idx.followup_1] || "", followup_2: r[idx.followup_2] || "",
-      assigned_seller: assignSeller || null,
-    }));
-    setPreview(rows);
     setLoading(false);
   };
 
