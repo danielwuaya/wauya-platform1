@@ -14,6 +14,12 @@ const OUTBOUND_STATUS = [
 ];
 
 const clean = (value) => String(value || "").trim();
+const researchTimestamp = (value) => {
+  const text = clean(value);
+  if (!text) return new Date().toISOString();
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00Z` : text);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+};
 const leadImportKey = ({ company, city, email, phone }) =>
   [company, city, email, phone].map(value => clean(value).toLowerCase().replace(/\s+/g, " ")).join("|");
 
@@ -57,6 +63,7 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
   if (headerIdx === -1) headerIdx = 0;
   const headers = data[headerIdx].map(h => String(h || "").toLowerCase().trim());
   const col = (...names) => headers.findIndex(h => names.some(n => h.includes(n)));
+  const exactCol = (...names) => headers.findIndex(h => names.includes(h));
   const idx = {
     lead_id: col("orden", "lead id"),
     company: col("médico", "medico", "empresa", "company", "nombre del", "razón social", "razon social", "negocio", "clínica", "clinica", "consultorio", "doctor"),
@@ -86,7 +93,13 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     country: col("país", "pais", "country"),
     province: col("provincia", "province", "estado", "state"),
     source_url: col("fuente", "source url", "url fuente", "perfil google", "google business"),
-    evidence_url: col("evidencia", "evidence", "url evidencia"),
+    evidence_url: exactCol("evidencia", "evidence", "url evidencia", "evidence url"),
+    no_website_evidence: col("evidencia sin web", "evidencia sin sitio"),
+    research_date: col("fecha de investigación", "fecha de investigacion", "research date"),
+    enrichment_status: col("estado de enriquecimiento", "enrichment status"),
+    contact_eligibility: col("elegibilidad de contacto", "contact eligibility"),
+    consent_basis: col("base de consentimiento", "consent basis"),
+    opt_out_status: col("estado de baja", "opt out status", "unsubscribe status"),
   };
   // Si no se encontró la columna del nombre, usa la primera columna
   const companyIdx = idx.company >= 0 ? idx.company : 0;
@@ -106,9 +119,13 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     country: r[idx.country] || "", province: r[idx.province] || "",
     website_url: r[idx.website_url] || "", maps_url: r[idx.maps] || "",
     source_url: r[idx.source_url] || r[idx.maps] || "", evidence_url: r[idx.evidence_url] || "",
+    no_website_evidence: r[idx.no_website_evidence] || "",
     has_website: Boolean(clean(r[idx.website_url])) || !/^(sin|no|none|n\/a)/i.test(clean(r[idx.website] || "sin")),
-    discovered_at: new Date().toISOString(), enrichment_status: "pendiente",
-    contact_eligibility: "pendiente", consent_type: "pendiente",
+    discovered_at: researchTimestamp(r[idx.research_date]),
+    enrichment_status: r[idx.enrichment_status] || "pendiente",
+    contact_eligibility: r[idx.contact_eligibility] || "pendiente",
+    consent_type: r[idx.consent_basis] || "no verificada",
+    opt_out_status: r[idx.opt_out_status] || "no consultado",
     assigned_seller: assignSeller || null,
   }));
   return result;
