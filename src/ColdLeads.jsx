@@ -13,6 +13,19 @@ const OUTBOUND_STATUS = [
   { value: "descartado", label: "Descartado", color: "#4A5568", icon: "✕" },
 ];
 
+const clean = (value) => String(value || "").trim();
+const leadImportKey = ({ company, city, email, phone }) =>
+  [company, city, email, phone].map(value => clean(value).toLowerCase().replace(/\s+/g, " ")).join("|");
+
+async function importLeads(rows) {
+  const prepared = rows.map(row => ({ ...row, import_key: leadImportKey(row) }));
+  const { error } = await supabase
+    .from("cold_leads")
+    .upsert(prepared, { onConflict: "import_key", ignoreDuplicates: true });
+  if (error) throw error;
+  return prepared.length;
+}
+
 // Lee un Google Sheet de leads y devuelve las filas parseadas
 async function readLeadsSheet(sheetId, batch, assignSeller) {
   const tabs = ["Leads", "Hoja1", "Sheet1", "Prospeccion", "Hoja 1", "Sheet 1"];
@@ -70,6 +83,10 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     website_url: col("website", "sitio web", "página web", "pagina web"),
     maps: col("google maps", "maps"),
     contact_status: col("estado de contacto", "estado contacto"),
+    country: col("país", "pais", "country"),
+    province: col("provincia", "province", "estado", "state"),
+    source_url: col("fuente", "source url", "url fuente", "perfil google", "google business"),
+    evidence_url: col("evidencia", "evidence", "url evidencia"),
   };
   // Si no se encontró la columna del nombre, usa la primera columna
   const companyIdx = idx.company >= 0 ? idx.company : 0;
@@ -86,6 +103,12 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     followup_1: r[idx.followup_1] || "", followup_2: r[idx.followup_2] || "",
     whatsapp: String(r[idx.whatsapp] || ""), rating: String(r[idx.rating] || ""),
     whatsapp_message: r[idx.whatsapp_msg] || "",
+    country: r[idx.country] || "", province: r[idx.province] || "",
+    website_url: r[idx.website_url] || "", maps_url: r[idx.maps] || "",
+    source_url: r[idx.source_url] || r[idx.maps] || "", evidence_url: r[idx.evidence_url] || "",
+    has_website: Boolean(clean(r[idx.website_url])) || !/^(sin|no|none|n\/a)/i.test(clean(r[idx.website] || "sin")),
+    discovered_at: new Date().toISOString(), enrichment_status: "pendiente",
+    contact_eligibility: "pendiente", consent_type: "pendiente",
     assigned_seller: assignSeller || null,
   }));
   return result;
@@ -322,9 +345,8 @@ function ImportModal({ sellers = [], onClose, onReload, showToast }) {
     if (!preview || preview.length === 0) return;
     setLoading(true);
     try {
-      const { error } = await supabase.from("cold_leads").insert(preview);
-      if (error) { showToast("Error: " + error.message, "error"); setLoading(false); return; }
-      onReload(); showToast(`${preview.length} leads importados`); onClose();
+      const count = await importLeads(preview);
+      onReload(); showToast(`${count} leads procesados sin duplicados`); onClose();
     } catch (e) { showToast("Error: " + e.message, "error"); setLoading(false); }
   };
 
@@ -502,9 +524,8 @@ function FoldersModal({ folders = [], sellers = [], onClose, onReload, showToast
     try {
       const rows = await readLeadsSheet(sheet.id, sheet.name, assignSeller || null);
       if (rows.length === 0) { showToast("No se encontraron leads en " + sheet.name, "error"); setImportingId(null); return; }
-      const { error } = await supabase.from("cold_leads").insert(rows);
-      if (error) { showToast("Error: " + error.message, "error"); setImportingId(null); return; }
-      onReload(); setImportedIds(p => [...p, sheet.id]); showToast(`${rows.length} leads importados de "${sheet.name}"`);
+      const count = await importLeads(rows);
+      onReload(); setImportedIds(p => [...p, sheet.id]); showToast(`${count} leads procesados de "${sheet.name}"`);
     } catch (e) { showToast("Error: " + e.message, "error"); }
     setImportingId(null);
   };
