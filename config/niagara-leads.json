@@ -1,0 +1,72 @@
+{
+  "overpass_endpoints": [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
+  ],
+  "request_timeout_seconds": 90,
+  "delay_between_requests_ms": 1200,
+  "only_without_website": true,
+  "localities": [
+    { "name": "St. Catharines", "latitude": 43.1594, "longitude": -79.2469, "radius_m": 9000 },
+    { "name": "Niagara Falls", "latitude": 43.0896, "longitude": -79.0849, "radius_m": 9000 },
+    { "name": "Welland", "latitude": 42.9922, "longitude": -79.2483, "radius_m": 8000 },
+    { "name": "Fort Erie", "latitude": 42.9018, "longitude": -78.9722, "radius_m": 10000 },
+    { "name": "Thorold", "latitude": 43.1236, "longitude": -79.1989, "radius_m": 6000 },
+    { "name": "Pelham", "latitude": 43.0374, "longitude": -79.3287, "radius_m": 8000 },
+    { "name": "Port Colborne", "latitude": 42.8865, "longitude": -79.2509, "radius_m": 8000 },
+    { "name": "Lincoln", "latitude": 43.1392, "longitude": -79.4849, "radius_m": 10000 },
+    { "name": "Grimsby", "latitude": 43.1943, "longitude": -79.5627, "radius_m": 7000 },
+    { "name": "Niagara-on-the-Lake", "latitude": 43.2552, "longitude": -79.0713, "radius_m": 10000 },
+    { "name": "Wainfleet", "latitude": 42.9249, "longitude": -79.3758, "radius_m": 10000 },
+    { "name": "West Lincoln", "latitude": 43.0706, "longitude": -79.5661, "radius_m": 11000 }
+  ],
+  "sectors": [
+    {
+      "id": "food_hospitality",
+      "label": "Restaurantes y cafeterías",
+      "selectors": [
+        { "key": "amenity", "value": "restaurant" },
+        { "key": "amenity", "value": "cafe" },
+        { "key": "amenity", "value": "fast_food" }
+      ]
+    },
+    {
+      "id": "personal_care",
+      "label": "Belleza y cuidado personal",
+      "selectors": [
+        { "key": "shop", "value": "hairdresser" },
+        { "key": "shop", "value": "beauty" },
+        { "key": "shop", "value": "massage" }
+      ]
+    },
+    {
+      "id": "health",
+      "label": "Salud local",
+      "selectors": [
+        { "key": "amenity", "value": "dentist" },
+        { "key": "amenity", "value": "clinic" },
+        { "key": "healthcare", "value": "physiotherapist" },
+        { "key": "healthcare", "value": "chiropractor" }
+      ]
+    },
+    {
+      "id": "automotive",
+      "label": "Servicios automotrices",
+      "selectors": [
+        { "key": "shop", "value": "car_repair" },
+        { "key": "shop", "value": "tyres" },
+        { "key": "amenity", "value": "car_wash" }
+      ]
+    },
+    {
+      "id": "home_services",
+      "label": "Servicios para el hogar",
+      "selectors": [
+        { "key": "craft", "value": "electrician" },
+        { "key": "craft", "value": "plumber" },
+        { "key": "craft", "value": "painter" },
+        { "key": "craft", "value": "landscaper" }
+      ]
+    }
+  ]
+}

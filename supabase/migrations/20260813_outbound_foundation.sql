@@ -11,7 +11,9 @@ alter table public.cold_leads
   add column if not exists discovered_at timestamptz,
   add column if not exists enrichment_status text not null default 'pendiente',
   add column if not exists contact_eligibility text not null default 'pendiente',
-  add column if not exists consent_type text not null default 'pendiente';
+  add column if not exists consent_type text not null default 'pendiente',
+  add column if not exists no_website_evidence text,
+  add column if not exists opt_out_status text not null default 'no consultado';
 
 create unique index if not exists cold_leads_import_key_unique
   on public.cold_leads (import_key)
