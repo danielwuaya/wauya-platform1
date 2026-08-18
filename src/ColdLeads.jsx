@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { supabase } from "./supabase.js";
+import { buildLeadRows } from "./leadImport.js";
 
 const C = { bg:"#060B18",s:"#0A1428",s2:"#0F1D38",b:"#1A2D52",tx:"#F0F0F4",tm:"#8A94A8",td:"#4A5568",acc:"#F8BA10",r:"#FF4D6A",g:"#36DE67",w:"#FFC107",p:"#4A90D9",bl:"#60A5FA",blBg:"#0A1633" };
 const F = "'Poppins', sans-serif", D = "'Playfair Display', serif";
@@ -13,35 +14,16 @@ const OUTBOUND_STATUS = [
   { value: "descartado", label: "Descartado", color: "#4A5568", icon: "✕" },
 ];
 
-const clean = (value) => String(value || "").trim();
-const researchTimestamp = (value) => {
-  const text = clean(value);
-  if (!text) return new Date().toISOString();
-  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00Z` : text);
-  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
-};
-const leadImportKey = ({ company, city, email, phone }) =>
-  [company, city, email, phone].map(value => clean(value).toLowerCase().replace(/\s+/g, " ")).join("|");
-
-async function importLeads(rows) {
-  const prepared = rows.map(row => ({ ...row, import_key: leadImportKey(row) }));
-  const { error } = await supabase
-    .from("cold_leads")
-    .upsert(prepared, { onConflict: "import_key", ignoreDuplicates: true });
-  if (error) throw error;
-  return prepared.length;
-}
-
 // Lee un Google Sheet de leads y devuelve las filas parseadas
 async function readLeadsSheet(sheetId, batch, assignSeller) {
   const tabs = ["Leads", "Hoja1", "Sheet1", "Prospeccion", "Hoja 1", "Sheet 1"];
-  let data = null, lastErr = "";
+  let data = null, selectedTab = "first_sheet", lastErr = "";
   for (const tab of tabs) {
     try {
       const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=${encodeURIComponent(tab)}!A1:AZ200`);
       const j = await r.json();
       if (j.error) { lastErr = j.error; continue; }
-      if (Array.isArray(j) && j.length > 2) { data = j; break; }
+      if (Array.isArray(j) && j.length > 1) { data = j; selectedTab = tab; break; }
     } catch (e) { lastErr = e.message; }
   }
   // Fallback: primera hoja sin importar el nombre
@@ -49,86 +31,18 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
     try {
       const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=A1:AZ200`);
       const j = await r.json();
-      if (Array.isArray(j) && j.length > 2) data = j;
+      if (Array.isArray(j) && j.length > 1) data = j;
       else if (j.error) lastErr = j.error;
     } catch (e) { lastErr = e.message; }
   }
   if (!data) throw new Error(lastErr || "No se pudo leer. Verifica que sea Google Sheet compartido.");
-  let headerIdx = data.findIndex(row => row.some(c => c && /empresa|company|médico|medico|nombre del|razón social|razon social/i.test(String(c))));
-  // Si no encuentra por nombre, busca la fila que tenga más celdas llenas (probablemente el header)
-  if (headerIdx === -1) {
-    let maxCells = 0;
-    data.forEach((row, i) => { const filled = row.filter(c => c && String(c).trim()).length; if (filled > maxCells && filled >= 4) { maxCells = filled; headerIdx = i; } });
-  }
-  if (headerIdx === -1) headerIdx = 0;
-  const headers = data[headerIdx].map(h => String(h || "").toLowerCase().trim());
-  const col = (...names) => headers.findIndex(h => names.some(n => h.includes(n)));
-  const exactCol = (...names) => headers.findIndex(h => names.includes(h));
-  const idx = {
-    lead_id: col("orden", "lead id"),
-    company: col("médico", "medico", "empresa", "company", "nombre del", "razón social", "razon social", "negocio", "clínica", "clinica", "consultorio", "doctor"),
-    industry: col("especialidad", "enfoque", "industria", "industry"),
-    city: col("ciudad", "city"),
-    address: col("dirección", "direccion", "address"),
-    phone: col("teléfono", "telefono", "phone"),
-    email: col("email", "correo electrónico", "correo"),
-    instagram: col("instagram"), facebook: col("facebook"), linkedin: col("linkedin"),
-    owner: col("responsable", "propietario", "gerente", "owner"),
-    role: col("cargo", "role"),
-    website: col("estado website", "estado web", "estado de la página", "website"),
-    problem: col("pain point", "diagnóstico comercial", "diagnostico comercial", "problema detectado", "problem"),
-    opportunity: col("tipo de oportunidad", "ángulo de venta", "angulo de venta", "oportunidad"),
-    solution: col("servicio recomendado", "solución web", "solucion web", "solution"),
-    priority: col("prioridad"), score: col("lead score", "score"),
-    message: col("mensaje inicial dm", "mensaje inicial"),
-    obs: col("observaciones", "resultado"),
-    email_subject: col("asunto de email", "asunto"),
-    email_body: col("respuesta si muestra interés", "respuesta si muestra interes", "email inicial"),
-    followup_1: col("seguimiento 1"), followup_2: col("seguimiento 2"),
-    whatsapp: col("whatsapp"), rating: col("rating google", "rating"),
-    whatsapp_msg: col("mensaje whatsapp"),
-    website_url: col("website", "sitio web", "página web", "pagina web"),
-    maps: col("google maps", "maps"),
-    contact_status: col("estado de contacto", "estado contacto"),
-    country: col("país", "pais", "country"),
-    province: col("provincia", "province", "estado", "state"),
-    source_url: col("fuente", "source url", "url fuente", "perfil google", "google business"),
-    evidence_url: exactCol("evidencia", "evidence", "url evidencia", "evidence url"),
-    no_website_evidence: col("evidencia sin web", "evidencia sin sitio"),
-    research_date: col("fecha de investigación", "fecha de investigacion", "research date"),
-    enrichment_status: col("estado de enriquecimiento", "enrichment status"),
-    contact_eligibility: col("elegibilidad de contacto", "contact eligibility"),
-    consent_basis: col("base de consentimiento", "consent basis"),
-    opt_out_status: col("estado de baja", "opt out status", "unsubscribe status"),
-  };
-  // Si no se encontró la columna del nombre, usa la primera columna
-  const companyIdx = idx.company >= 0 ? idx.company : 0;
-  const result = data.slice(headerIdx + 1).filter(r => r[companyIdx] && String(r[companyIdx]).trim()).map(r => ({
-    lead_id: r[idx.lead_id] || "", company: r[companyIdx] || "", industry: r[idx.industry] || "",
-    city: r[idx.city] || "", address: r[idx.address] || "", phone: String(r[idx.phone] || ""),
-    email: r[idx.email] || "", instagram: r[idx.instagram] || "", facebook: r[idx.facebook] || "",
-    linkedin: r[idx.linkedin] || "", owner_name: r[idx.owner] || "", owner_role: r[idx.role] || "",
-    website_status: r[idx.website] || "", problem: r[idx.problem] || "", opportunity: r[idx.opportunity] || "",
-    recommended_solution: r[idx.solution] || "", priority: r[idx.priority] || "",
-    lead_score: parseFloat(r[idx.score]) || 0, initial_message: r[idx.message] || "",
-    observations: r[idx.obs] || "", batch: batch || "Lote sin nombre", outbound_status: "sin_contactar",
-    email_subject: r[idx.email_subject] || "", email_body: r[idx.email_body] || "",
-    followup_1: r[idx.followup_1] || "", followup_2: r[idx.followup_2] || "",
-    whatsapp: String(r[idx.whatsapp] || ""), rating: String(r[idx.rating] || ""),
-    whatsapp_message: r[idx.whatsapp_msg] || "",
-    country: r[idx.country] || "", province: r[idx.province] || "",
-    website_url: r[idx.website_url] || "", maps_url: r[idx.maps] || "",
-    source_url: r[idx.source_url] || r[idx.maps] || "", evidence_url: r[idx.evidence_url] || "",
-    no_website_evidence: r[idx.no_website_evidence] || "",
-    has_website: Boolean(clean(r[idx.website_url])) || !/^(sin|no|none|n\/a)/i.test(clean(r[idx.website] || "sin")),
-    discovered_at: researchTimestamp(r[idx.research_date]),
-    enrichment_status: r[idx.enrichment_status] || "pendiente",
-    contact_eligibility: r[idx.contact_eligibility] || "pendiente",
-    consent_type: r[idx.consent_basis] || "no verificada",
-    opt_out_status: r[idx.opt_out_status] || "no consultado",
-    assigned_seller: assignSeller || null,
-  }));
-  return result;
+  return buildLeadRows(data, { batch, assignSeller, sheetId, tab: selectedTab });
+}
+
+async function importLeads(rows, actorId) {
+  const { data, error } = await supabase.rpc("import_cold_leads", { p_leads: rows, p_actor_id: actorId ? String(actorId) : null });
+  if (error) throw error;
+  return data || { inserted: rows.length, updated: 0, total: rows.length };
 }
 
 function Btn({ children, onClick, v = "primary", sz = "md", disabled, style: sx }) { const b = { display: "inline-flex", alignItems: "center", gap: 7, border: "none", cursor: disabled ? "not-allowed" : "pointer", fontFamily: F, fontWeight: 600, borderRadius: 10, transition: "all .2s", opacity: disabled ? .35 : 1, whiteSpace: "nowrap", fontSize: sz === "sm" ? 11 : 13, padding: sz === "sm" ? "6px 12px" : "9px 18px" }; const vs = { primary: { background: `linear-gradient(135deg,${C.acc},#D4A00E)`, color: "#060B18" }, secondary: { background: C.s2, color: C.tx, border: `1px solid ${C.b}` }, ghost: { background: "transparent", color: C.tm } }; return <button onClick={onClick} disabled={disabled} style={{ ...b, ...vs[v], ...sx }}>{children}</button>; }
@@ -162,17 +76,31 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
     return { total: visibleLeads.length, byStatus };
   }, [visibleLeads]);
 
-  const updStatus = async (id, status) => {
-    try { await supabase.from("cold_leads").update({ outbound_status: status }).eq("id", id); onReload(); showToast("Estado actualizado"); }
-    catch { showToast("Error", "error"); }
+  const updStatus = async (lead, status) => {
+    if (status === "escrito" && lead.contact_eligibility !== "eligible") {
+      showToast("Documenta la elegibilidad antes de registrar contacto", "error"); return;
+    }
+    try {
+      const { error } = await supabase.rpc("transition_cold_lead", { p_lead_id: String(lead.id), p_status: status, p_actor_id: currentUser?.id ? String(currentUser.id) : null });
+      if (error) throw error;
+      onReload(); showToast("Estado actualizado y auditado");
+    } catch (error) { showToast(error.message || "Error", "error"); }
   };
   const updNotes = async (id, notes) => {
-    try { await supabase.from("cold_leads").update({ notes }).eq("id", id); onReload(); }
-    catch {}
+    try {
+      const { error } = await supabase.from("cold_leads").update({ notes }).eq("id", id);
+      if (error) throw error;
+      if (notes.trim()) await supabase.from("cold_lead_activities").insert({ lead_id: String(id), activity_type: "note", direction: "internal", notes: notes.trim(), actor_id: currentUser?.id ? String(currentUser.id) : null });
+      onReload();
+    } catch (error) { showToast(error.message || "Error guardando notas", "error"); }
   };
   const delLead = async (id) => {
-    if (!confirm("¿Eliminar este lead?")) return;
-    try { await supabase.from("cold_leads").delete().eq("id", id); onReload(); showToast("Eliminado"); } catch {}
+    if (!confirm("¿Archivar este lead? Se conservará su auditoría.")) return;
+    try {
+      const { error } = await supabase.rpc("archive_cold_lead", { p_lead_id: String(id), p_actor_id: currentUser?.id ? String(currentUser.id) : null });
+      if (error) throw error;
+      onReload(); showToast("Lead archivado");
+    } catch (error) { showToast(error.message || "Error al archivar", "error"); }
   };
 
   const filtered = visibleLeads.filter(l => {
@@ -243,11 +171,11 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
         {batches.length > 0 && <select value={selBatch} onChange={e => setSelBatch(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}><option value="todos">Todos los lotes</option>{batches.map(b => <option key={b} value={b}>{b}</option>)}</select>}
         {!isSeller && selBatch !== "todos" && <Btn onClick={async () => {
           const count = leads.filter(l => l.batch === selBatch).length;
-          if (!confirm(`¿Eliminar el lote "${selBatch}" completo? Se borrarán ${count} leads. Esta acción no se puede deshacer.`)) return;
+          if (!confirm(`¿Archivar el lote "${selBatch}" completo? Se ocultarán ${count} leads y se conservará la auditoría.`)) return;
           try {
-            const { error } = await supabase.from("cold_leads").delete().eq("batch", selBatch);
+            const { error } = await supabase.rpc("archive_cold_lead_batch", { p_batch: selBatch, p_actor_id: currentUser?.id ? String(currentUser.id) : null });
             if (error) { showToast("Error: " + error.message, "error"); return; }
-            setSelBatch("todos"); onReload(); showToast(`Lote "${selBatch}" eliminado (${count} leads)`);
+            setSelBatch("todos"); onReload(); showToast(`Lote "${selBatch}" archivado (${count} leads)`);
           } catch (e) { showToast("Error: " + e.message, "error"); }
         }} v="secondary" sz="sm" style={{ color: C.r, borderColor: C.r + "40" }}>🗑️ Borrar lote</Btn>}
         <select value={filterChannel} onChange={e => setFilterChannel(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}>
@@ -297,13 +225,16 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
                 <div style={{ display: "flex", gap: 10, marginTop: 6, fontSize: 10, color: C.td, flexWrap: "wrap" }}>
                   {lead.owner_name && lead.owner_name !== "No encontrado públicamente" && <span>👤 {lead.owner_name}</span>}
                   {lead.phone && lead.phone.length > 4 && <span>📞 {lead.phone}</span>}
-                  {lead.email && lead.email.includes("@") && <a href={`mailto:${lead.email}`} style={{ color: C.acc, textDecoration: "none" }}>✉️ {lead.email}</a>}
+                  {lead.email && lead.email.includes("@") && <span style={{ color: C.acc }}>✉️ {lead.email}</span>}
                   {lead.instagram && lead.instagram.startsWith("http") && <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ color: C.p, textDecoration: "none" }}>📷 IG</a>}
                 </div>
                 {lead.problem && <div style={{ fontSize: 10, color: C.td, marginTop: 6, fontStyle: "italic" }}>💡 {lead.problem.slice(0, 120)}{lead.problem.length > 120 ? "..." : ""}</div>}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-                <select value={lead.outbound_status} onChange={e => updStatus(lead.id, e.target.value)} style={{ background: st.color + "15", border: `1px solid ${st.color}40`, borderRadius: 8, padding: "6px 10px", color: st.color, fontSize: 11, fontWeight: 600, fontFamily: F, outline: "none", cursor: "pointer" }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: lead.contact_eligibility === "eligible" ? C.g : lead.contact_eligibility === "ineligible" ? C.r : C.w }}>
+                  {lead.contact_eligibility === "eligible" ? "✓ Elegible revisado" : lead.contact_eligibility === "ineligible" ? "⛔ No contactar" : "⚠ Revisión CASL pendiente"}
+                </div>
+                <select value={lead.outbound_status} onChange={e => updStatus(lead, e.target.value)} style={{ background: st.color + "15", border: `1px solid ${st.color}40`, borderRadius: 8, padding: "6px 10px", color: st.color, fontSize: 11, fontWeight: 600, fontFamily: F, outline: "none", cursor: "pointer" }}>
                   {OUTBOUND_STATUS.map(s => <option key={s.value} value={s.value} style={{ background: C.s, color: C.tx }}>{s.icon} {s.label}</option>)}
                 </select>
                 <div style={{ display: "flex", gap: 4 }}>
@@ -323,15 +254,15 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
         {filtered.length === 0 && <Card style={{ textAlign: "center", padding: 40 }}><p style={{ color: C.td }}>{leads.length === 0 ? 'Sin leads. Click "+ Importar lote" para cargar tu primera tabla.' : "Ningún lead con estos filtros."}</p></Card>}
       </div>
 
-      {modal?.type === "import" && <ImportModal sellers={sellers} onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
-      {modal?.type === "folders" && <FoldersModal folders={folders} sellers={sellers} onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
-      {modal?.type === "detail" && <DetailModal lead={modal.lead} onClose={() => setModal(null)} onSaveNotes={updNotes} onCopied={() => showToast("Copiado")} />}
+      {modal?.type === "import" && <ImportModal sellers={sellers} actorId={currentUser?.id} onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
+      {modal?.type === "folders" && <FoldersModal folders={folders} sellers={sellers} actorId={currentUser?.id} onClose={() => setModal(null)} onReload={onReload} showToast={showToast} />}
+      {modal?.type === "detail" && <DetailModal lead={modal.lead} actorId={currentUser?.id} onClose={() => setModal(null)} onReload={onReload} onSaveNotes={updNotes} onCopied={() => showToast("Copiado")} showToast={showToast} />}
       {modal?.type === "convert" && <ConvertModal lead={modal.lead} onClose={() => setModal(null)} onConvert={onConvert} showToast={showToast} onReload={onReload} />}
     </div>
   );
 }
 
-function ImportModal({ sellers = [], onClose, onReload, showToast }) {
+function ImportModal({ sellers = [], actorId, onClose, onReload, showToast }) {
   const [link, setLink] = useState("");
   const [batch, setBatch] = useState("");
   const [assignSeller, setAssignSeller] = useState("");
@@ -362,8 +293,8 @@ function ImportModal({ sellers = [], onClose, onReload, showToast }) {
     if (!preview || preview.length === 0) return;
     setLoading(true);
     try {
-      const count = await importLeads(preview);
-      onReload(); showToast(`${count} leads procesados sin duplicados`); onClose();
+      const result = await importLeads(preview, actorId);
+      onReload(); showToast(`${result.inserted} nuevos · ${result.updated} actualizados sin duplicar`); onClose();
     } catch (e) { showToast("Error: " + e.message, "error"); setLoading(false); }
   };
 
@@ -398,16 +329,81 @@ function MsgBlock({ label, text, onCopied }) {
   </div>;
 }
 
-function DetailModal({ lead, onClose, onSaveNotes, onCopied }) {
+function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, showToast }) {
   const [notes, setNotes] = useState(lead.notes || "");
+  const [activities, setActivities] = useState([]);
+  const [eligibility, setEligibility] = useState(lead.contact_eligibility || "review_required");
+  const [basis, setBasis] = useState(lead.consent_basis || "unknown");
+  const [eligibilityNotes, setEligibilityNotes] = useState(lead.eligibility_notes || "");
+  const [consentSource, setConsentSource] = useState(lead.consent_source || "");
+  const [consentCapturedAt, setConsentCapturedAt] = useState(lead.consent_captured_at?.slice(0, 10) || "");
+  const [consentExpiresAt, setConsentExpiresAt] = useState(lead.consent_expires_at?.slice(0, 10) || "");
+  const [activity, setActivity] = useState({ activity_type: "note", channel: "other", notes: "" });
+  const canContact = lead.contact_eligibility === "eligible" && !lead.do_not_contact && !lead.unsubscribed_at;
+  const loadActivities = async () => {
+    const { data } = await supabase.from("cold_lead_activities").select("*").eq("lead_id", String(lead.id)).order("occurred_at", { ascending: false }).limit(30);
+    setActivities(data || []);
+  };
+  useEffect(() => { loadActivities(); }, [lead.id]);
+  const saveEligibility = async () => {
+    const { error } = await supabase.rpc("review_cold_lead_eligibility", {
+      p_lead_id: String(lead.id), p_eligibility: eligibility, p_consent_basis: basis,
+      p_notes: eligibilityNotes || null, p_consent_source: consentSource || null,
+      p_consent_captured_at: consentCapturedAt ? `${consentCapturedAt}T00:00:00Z` : null,
+      p_consent_expires_at: consentExpiresAt ? `${consentExpiresAt}T23:59:59Z` : null,
+      p_actor_id: actorId ? String(actorId) : null,
+    });
+    if (error) { showToast(error.message, "error"); return; }
+    showToast("Revisión de elegibilidad auditada"); onReload(); onClose();
+  };
+  const markUnsubscribed = async () => {
+    if (!confirm("¿Registrar una baja/no contactar? Esto bloqueará futuros contactos.")) return;
+    const { error } = await supabase.rpc("mark_cold_lead_unsubscribed", {
+      p_lead_id: String(lead.id), p_notes: eligibilityNotes || null, p_actor_id: actorId ? String(actorId) : null,
+    });
+    if (error) { showToast(error.message, "error"); return; }
+    showToast("Baja registrada; contacto bloqueado"); onReload(); onClose();
+  };
+  const addActivity = async () => {
+    if (!activity.notes.trim()) return;
+    if (activity.activity_type === "contact_attempt" && !canContact) {
+      showToast("El contacto requiere elegibilidad revisada", "error"); return;
+    }
+    const { error } = await supabase.from("cold_lead_activities").insert({
+      lead_id: String(lead.id), activity_type: activity.activity_type,
+      channel: activity.activity_type === "note" ? null : activity.channel,
+      direction: activity.activity_type === "note" ? "internal" : activity.activity_type === "reply" ? "inbound" : "outbound",
+      notes: activity.notes.trim(), actor_id: actorId ? String(actorId) : null,
+    });
+    if (error) { showToast(error.message, "error"); return; }
+    setActivity({ activity_type: "note", channel: "other", notes: "" }); loadActivities(); showToast("Actividad registrada");
+  };
   const field = (label, value) => value && value !== "No encontrado públicamente" ? <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>{label}</div><div style={{ fontSize: 12, color: C.tx, marginTop: 2 }}>{value}</div></div> : null;
   return <ModalWrap title={lead.company} onClose={onClose} w={620}>
+    <div style={{ background: canContact ? C.g + "0C" : C.w + "0C", borderRadius: 12, border: `1px solid ${canContact ? C.g : C.w}35`, padding: 14, marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: canContact ? C.g : C.w, marginBottom: 8 }}>{canContact ? "✓ Elegibilidad documentada" : "⚠ Contacto bloqueado hasta completar revisión"}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <select value={eligibility} onChange={e => setEligibility(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }}>
+          <option value="review_required">Revisión requerida</option><option value="eligible">Elegible</option><option value="ineligible">No elegible</option><option value="expired">Base expirada</option>
+        </select>
+        <select value={basis} onChange={e => setBasis(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }}>
+          <option value="unknown">Base desconocida</option><option value="express">Consentimiento expreso</option><option value="implied">Consentimiento implícito</option><option value="existing_business_relationship">Relación comercial existente</option><option value="inquiry">Consulta recibida</option><option value="other">Otra base documentada</option>
+        </select>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginTop: 8 }}>
+        <input value={consentSource} onChange={e => setConsentSource(e.target.value)} placeholder="Fuente/evidencia de la base" style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }} />
+        <input type="date" value={consentCapturedAt} onChange={e => setConsentCapturedAt(e.target.value)} title="Fecha de obtención" style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }} />
+        <input type="date" value={consentExpiresAt} onChange={e => setConsentExpiresAt(e.target.value)} title="Vencimiento cuando aplique" style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }} />
+      </div>
+      <textarea value={eligibilityNotes} onChange={e => setEligibilityNotes(e.target.value)} placeholder="Evidencia, alcance y fecha de la revisión..." style={{ width: "100%", marginTop: 8, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx, minHeight: 50 }} />
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginTop: 8 }}><span style={{ fontSize: 9, color: C.td }}>La baja y el registro de auditoría siguen siendo obligatorios antes de cualquier automatización.</span><div style={{ display: "flex", gap: 6 }}><Btn onClick={markUnsubscribed} v="secondary" sz="sm" style={{ color: C.r }}>Registrar baja</Btn><Btn onClick={saveEligibility} sz="sm">Guardar revisión</Btn></div></div>
+    </div>
     {/* Canales de contacto */}
     <div style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Cómo contactar</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {lead.whatsapp && lead.whatsapp.length > 4 && <a href={`https://wa.me/${lead.whatsapp.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#25D366", textDecoration: "none" }}>💬 WhatsApp: {lead.whatsapp} ↗</a>}
-        {lead.email && lead.email.includes("@") ? <a href={`mailto:${lead.email}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.acc, textDecoration: "none" }}>✉️ {lead.email}</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
+        {lead.whatsapp && lead.whatsapp.length > 4 && <div style={{ fontSize: 13, color: canContact ? "#25D366" : C.tm }}>💬 WhatsApp: {lead.whatsapp}{!canContact && " (bloqueado)"}</div>}
+        {lead.email && lead.email.includes("@") ? <div style={{ fontSize: 13, color: canContact ? C.acc : C.tm }}>✉️ {lead.email}{!canContact && " (bloqueado)"}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
         {lead.phone && lead.phone.length > 4 ? <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.g }}>📞 {lead.phone}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin teléfono</div>}
         {lead.instagram && lead.instagram.startsWith("http") ? <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#E1306C", textDecoration: "none" }}>📷 Instagram ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Instagram</div>}
         {lead.facebook && lead.facebook.startsWith("http") ? <a href={lead.facebook} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#1877F2", textDecoration: "none" }}>📘 Facebook ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Facebook</div>}
@@ -422,8 +418,14 @@ function DetailModal({ lead, onClose, onSaveNotes, onCopied }) {
     {field("Problema detectado", lead.problem)}
     {field("Oportunidad estratégica", lead.opportunity)}
     {field("Solución recomendada", lead.recommended_solution)}
+    <div style={{ background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, padding: 12, marginBottom: 16 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", marginBottom: 6 }}>Procedencia y evidencia</div>
+      <div style={{ fontSize: 11, color: C.tx }}>{lead.source_system || "legacy/manual"}{lead.source_external_id ? ` · ${lead.source_external_id}` : ""}</div>
+      {lead.source_url && <a href={lead.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: C.bl }}>Abrir fuente ↗</a>}
+      <div style={{ fontSize: 10, color: C.td, marginTop: 4 }}>Enriquecimiento: {lead.enrichment_status || "no iniciado"}</div>
+    </div>
     {/* MENSAJES LISTOS PARA COPIAR */}
-    {(lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
+    {canContact && (lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.acc, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>📋 Mensajes listos para enviar</div>
       {/* Email */}
       {(lead.email_subject || lead.email_body) && <div style={{ background: C.acc + "0A", border: `1px solid ${C.acc}30`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
@@ -447,6 +449,17 @@ function DetailModal({ lead, onClose, onSaveNotes, onCopied }) {
       {lead.followup_1 && <MsgBlock label="🔁 Seguimiento 1" text={lead.followup_1} onCopied={onCopied} />}
       {lead.followup_2 && <MsgBlock label="🔁 Seguimiento 2" text={lead.followup_2} onCopied={onCopied} />}
     </div>}
+    {!canContact && (lead.email_subject || lead.email_body || lead.initial_message || lead.whatsapp_message) && <div style={{ fontSize: 11, color: C.w, background: C.w + "0C", border: `1px solid ${C.w}30`, borderRadius: 10, padding: 12, marginBottom: 16 }}>Los borradores existen, pero copiar/abrir acciones está bloqueado hasta documentar elegibilidad, base aplicable y auditoría.</div>}
+    <div style={{ borderTop: `1px solid ${C.b}`, paddingTop: 14, marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.tm, marginBottom: 8 }}>REGISTRAR ACTIVIDAD</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <select value={activity.activity_type} onChange={e => setActivity({ ...activity, activity_type: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 7, color: C.tx }}><option value="note">Nota interna</option><option value="contact_attempt">Intento de contacto</option><option value="reply">Respuesta</option><option value="meeting">Reunión</option></select>
+        {activity.activity_type !== "note" && <select value={activity.channel} onChange={e => setActivity({ ...activity, channel: e.target.value })} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 7, color: C.tx }}><option value="email">Email</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="other">Otro</option></select>}
+      </div>
+      <textarea value={activity.notes} onChange={e => setActivity({ ...activity, notes: e.target.value })} placeholder="Resultado o contexto verificable..." style={{ width: "100%", marginTop: 7, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx, minHeight: 50 }} />
+      <Btn onClick={addActivity} disabled={!activity.notes.trim()} sz="sm">Añadir al historial</Btn>
+      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>{activities.map(item => <div key={item.id} style={{ fontSize: 10, color: C.tm, padding: "6px 8px", background: C.bg, borderRadius: 7 }}><b style={{ color: C.tx }}>{item.activity_type}</b> · {new Date(item.occurred_at).toLocaleString()} {item.notes ? `— ${item.notes}` : ""}</div>)}</div>
+    </div>
     <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Notas de seguimiento</label><textarea value={notes} onChange={e => setNotes(e.target.value)} onBlur={() => onSaveNotes(lead.id, notes)} placeholder="Anota lo que pase con este lead..." style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", minHeight: 70, marginTop: 6, resize: "vertical" }} /></div>
   </ModalWrap>;
 }
@@ -497,7 +510,7 @@ function ConvertModal({ lead, onClose, onConvert, showToast, onReload }) {
   </ModalWrap>;
 }
 
-function FoldersModal({ folders = [], sellers = [], onClose, onReload, showToast }) {
+function FoldersModal({ folders = [], sellers = [], actorId, onClose, onReload, showToast }) {
   const [assignSeller, setAssignSeller] = useState("");
   const [link, setLink] = useState("");
   const [saveName, setSaveName] = useState("");
@@ -541,8 +554,9 @@ function FoldersModal({ folders = [], sellers = [], onClose, onReload, showToast
     try {
       const rows = await readLeadsSheet(sheet.id, sheet.name, assignSeller || null);
       if (rows.length === 0) { showToast("No se encontraron leads en " + sheet.name, "error"); setImportingId(null); return; }
-      const count = await importLeads(rows);
-      onReload(); setImportedIds(p => [...p, sheet.id]); showToast(`${count} leads procesados de "${sheet.name}"`);
+      const result = await importLeads(rows, actorId);
+      onReload(); setImportedIds(p => [...p, sheet.id]);
+      showToast(`${result.inserted} nuevos · ${result.updated} actualizados de "${sheet.name}"`);
     } catch (e) { showToast("Error: " + e.message, "error"); }
     setImportingId(null);
   };
