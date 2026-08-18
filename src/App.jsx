@@ -113,7 +113,7 @@ function AppInner(){
   const[coldLeads,setColdLeads]=useState([]);
   const[leadFolders,setLeadFolders]=useState([]);
 
-  const safeQuery=async(table,opts={})=>{try{let q=supabase.from(table).select("*");if(opts.order)q=q.order(opts.order,{ascending:opts.asc??false});if(opts.limit)q=q.limit(opts.limit);const{data}=await q;return data||[]}catch{return[]}};
+  const safeQuery=async(table,opts={})=>{try{let q=supabase.from(table).select("*");if(opts.is)q=q.is(opts.is[0],opts.is[1]);if(opts.order)q=q.order(opts.order,{ascending:opts.asc??false});if(opts.limit)q=q.limit(opts.limit);const{data}=await q;return data||[]}catch{return[]}};
   const loadAll=useCallback(async()=>{
     setProspects(await safeQuery("prospects",{order:"created_at"}));
     setClients(await safeQuery("clients",{order:"created_at"}));
@@ -129,7 +129,7 @@ function AppInner(){
     setClientExtras(await safeQuery("client_extras",{order:"created_at"}));
     setExpenseRecords(await safeQuery("expenses",{order:"created_at"}));
     setIncomeRecords(await safeQuery("income_records",{order:"created_at"}));
-    setColdLeads(await safeQuery("cold_leads",{order:"created_at"}));
+    setColdLeads(await safeQuery("cold_leads",{order:"created_at",is:["archived_at",null]}));
     setLeadFolders(await safeQuery("lead_folders",{order:"created_at"}));
   },[]);
   useEffect(()=>{
