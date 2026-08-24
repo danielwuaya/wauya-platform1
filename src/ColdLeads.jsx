@@ -1,3 +1,7 @@
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-mHzskp59' (errno=Operation not permitted)
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-Yqrrbz4s' (errno=Operation not permitted)
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { buildLeadRows } from "./leadImport.js";
@@ -231,9 +235,7 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
                 {lead.problem && <div style={{ fontSize: 10, color: C.td, marginTop: 6, fontStyle: "italic" }}>💡 {lead.problem.slice(0, 120)}{lead.problem.length > 120 ? "..." : ""}</div>}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: lead.contact_eligibility === "eligible" ? C.g : lead.contact_eligibility === "ineligible" ? C.r : C.w }}>
-                  {lead.contact_eligibility === "eligible" ? "✓ Elegible revisado" : lead.contact_eligibility === "ineligible" ? "⛔ No contactar" : "⚠ Revisión CASL pendiente"}
-                </div>
+                {lead.contact_eligibility === "ineligible" && <div style={{ fontSize: 9, fontWeight: 700, color: C.r }}>⛔ No contactar</div>}
                 <select value={lead.outbound_status} onChange={e => updStatus(lead, e.target.value)} style={{ background: st.color + "15", border: `1px solid ${st.color}40`, borderRadius: 8, padding: "6px 10px", color: st.color, fontSize: 11, fontWeight: 600, fontFamily: F, outline: "none", cursor: "pointer" }}>
                   {OUTBOUND_STATUS.map(s => <option key={s.value} value={s.value} style={{ background: C.s, color: C.tx }}>{s.icon} {s.label}</option>)}
                 </select>
@@ -380,8 +382,9 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
   };
   const field = (label, value) => value && value !== "No encontrado públicamente" ? <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>{label}</div><div style={{ fontSize: 12, color: C.tx, marginTop: 2 }}>{value}</div></div> : null;
   return <ModalWrap title={lead.company} onClose={onClose} w={620}>
-    <div style={{ background: canContact ? C.g + "0C" : C.w + "0C", borderRadius: 12, border: `1px solid ${canContact ? C.g : C.w}35`, padding: 14, marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: canContact ? C.g : C.w, marginBottom: 8 }}>{canContact ? "✓ Elegibilidad documentada" : "⚠ Contacto bloqueado hasta completar revisión"}</div>
+    <div style={{ background: C.s2, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.tx, marginBottom: 4 }}>Control de contacto saliente</div>
+      <div style={{ fontSize: 10, color: C.tm, marginBottom: 8 }}>La ficha y los datos públicos siempre son visibles. Completa esta sección únicamente antes de registrar un mensaje comercial.</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <select value={eligibility} onChange={e => setEligibility(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }}>
           <option value="review_required">Revisión requerida</option><option value="eligible">Elegible</option><option value="ineligible">No elegible</option><option value="expired">Base expirada</option>
@@ -402,8 +405,8 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
     <div style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Cómo contactar</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {lead.whatsapp && lead.whatsapp.length > 4 && <div style={{ fontSize: 13, color: canContact ? "#25D366" : C.tm }}>💬 WhatsApp: {lead.whatsapp}{!canContact && " (bloqueado)"}</div>}
-        {lead.email && lead.email.includes("@") ? <div style={{ fontSize: 13, color: canContact ? C.acc : C.tm }}>✉️ {lead.email}{!canContact && " (bloqueado)"}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
+        {lead.whatsapp && lead.whatsapp.length > 4 && <div style={{ fontSize: 13, color: "#25D366" }}>💬 WhatsApp: {lead.whatsapp}</div>}
+        {lead.email && lead.email.includes("@") ? <div style={{ fontSize: 13, color: C.acc }}>✉️ {lead.email}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
         {lead.phone && lead.phone.length > 4 ? <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.g }}>📞 {lead.phone}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin teléfono</div>}
         {lead.instagram && lead.instagram.startsWith("http") ? <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#E1306C", textDecoration: "none" }}>📷 Instagram ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Instagram</div>}
         {lead.facebook && lead.facebook.startsWith("http") ? <a href={lead.facebook} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#1877F2", textDecoration: "none" }}>📘 Facebook ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Facebook</div>}
@@ -425,8 +428,9 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
       <div style={{ fontSize: 10, color: C.td, marginTop: 4 }}>Enriquecimiento: {lead.enrichment_status || "no iniciado"}</div>
     </div>
     {/* MENSAJES LISTOS PARA COPIAR */}
-    {canContact && (lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.acc, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>📋 Mensajes listos para enviar</div>
+    {(lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.acc, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>📋 Borradores disponibles</div>
+      <div style={{ fontSize: 9, color: C.td, marginBottom: 10 }}>Puedes consultar y copiar estos textos. Verifica la base aplicable antes de utilizarlos para contacto comercial.</div>
       {/* Email */}
       {(lead.email_subject || lead.email_body) && <div style={{ background: C.acc + "0A", border: `1px solid ${C.acc}30`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -449,7 +453,6 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
       {lead.followup_1 && <MsgBlock label="🔁 Seguimiento 1" text={lead.followup_1} onCopied={onCopied} />}
       {lead.followup_2 && <MsgBlock label="🔁 Seguimiento 2" text={lead.followup_2} onCopied={onCopied} />}
     </div>}
-    {!canContact && (lead.email_subject || lead.email_body || lead.initial_message || lead.whatsapp_message) && <div style={{ fontSize: 11, color: C.w, background: C.w + "0C", border: `1px solid ${C.w}30`, borderRadius: 10, padding: 12, marginBottom: 16 }}>Los borradores existen, pero copiar/abrir acciones está bloqueado hasta documentar elegibilidad, base aplicable y auditoría.</div>}
     <div style={{ borderTop: `1px solid ${C.b}`, paddingTop: 14, marginBottom: 16 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.tm, marginBottom: 8 }}>REGISTRAR ACTIVIDAD</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
