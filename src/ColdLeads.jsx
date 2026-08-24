@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { buildLeadRows } from "./leadImport.js";
+import { filterAndSortLeads } from "./leadFilters.js";
 
 const C = { bg:"#060B18",s:"#0A1428",s2:"#0F1D38",b:"#1A2D52",tx:"#F0F0F4",tm:"#8A94A8",td:"#4A5568",acc:"#F8BA10",r:"#FF4D6A",g:"#36DE67",w:"#FFC107",p:"#4A90D9",bl:"#60A5FA",blBg:"#0A1633" };
 const F = "'Poppins', sans-serif", D = "'Playfair Display', serif";
@@ -58,6 +59,8 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
   const [filterSeller, setFilterSeller] = useState("todos");
   const [filterCity, setFilterCity] = useState("todos");
   const [filterIndustry, setFilterIndustry] = useState("todos");
+  const [filterPriority, setFilterPriority] = useState("todos");
+  const [sortLeads, setSortLeads] = useState("original");
   const showToast = toast || (() => {});
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
@@ -103,21 +106,33 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
     } catch (error) { showToast(error.message || "Error al archivar", "error"); }
   };
 
-  const filtered = visibleLeads.filter(l => {
-    if (filterStatus !== "todos" && l.outbound_status !== filterStatus) return false;
-    if (selBatch !== "todos" && l.batch !== selBatch) return false;
-    if (filterSeller !== "todos" && l.assigned_seller !== filterSeller) return false;
-    if (filterCity !== "todos" && l.city !== filterCity) return false;
-    if (filterIndustry !== "todos" && l.industry !== filterIndustry) return false;
-    if (search && !(l.company + l.city + l.industry + l.owner_name).toLowerCase().includes(search.toLowerCase())) return false;
-    const hasIG = l.instagram && l.instagram.startsWith("http");
-    const hasFB = l.facebook && l.facebook.startsWith("http");
-    const hasEmail = l.email && l.email.includes("@");
-    if (filterChannel === "instagram" && !hasIG) return false;
-    if (filterChannel === "email" && !hasEmail) return false;
-    if (filterChannel === "sin_social" && (hasIG || hasFB)) return false;
-    return true;
+  const filtered = filterAndSortLeads(visibleLeads, {
+    status: filterStatus,
+    batch: selBatch,
+    seller: filterSeller,
+    city: filterCity,
+    industry: filterIndustry,
+    channel: filterChannel,
+    priority: filterPriority,
+    search,
+    sort: sortLeads,
   });
+
+  const hasActiveFilters = Boolean(search) || filterStatus !== "todos" || selBatch !== "todos" ||
+    filterSeller !== "todos" || filterCity !== "todos" || filterIndustry !== "todos" ||
+    filterChannel !== "todos" || filterPriority !== "todos" || sortLeads !== "original";
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilterStatus("todos");
+    setSelBatch("todos");
+    setFilterChannel("todos");
+    setFilterSeller("todos");
+    setFilterCity("todos");
+    setFilterIndustry("todos");
+    setFilterPriority("todos");
+    setSortLeads("original");
+  };
 
   return (
     <div style={{ animation: "fadeUp .3s ease" }}>
@@ -186,7 +201,24 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
         </select>
         {cities.length > 1 && <select value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}><option value="todos">Todas las ciudades</option>{cities.map(c => <option key={c} value={c}>{c}</option>)}</select>}
         {industries.length > 1 && <select value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "9px 12px", color: C.tx, fontSize: 12, fontFamily: F, outline: "none", cursor: "pointer" }}><option value="todos">Todas las industrias</option>{industries.map(i => <option key={i} value={i}>{i}</option>)}</select>}
-        {filterStatus !== "todos" && <Btn onClick={() => setFilterStatus("todos")} v="ghost" sz="sm">✕ Ver todos</Btn>}
+        <select aria-label="Filtrar leads por prioridad" value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={{ background: C.bg, border: `1px solid ${filterPriority !== "todos" ? C.acc : C.b}`, borderRadius: 10, padding: "9px 12px", color: filterPriority !== "todos" ? C.acc : C.tx, fontSize: 12, fontFamily: F, fontWeight: filterPriority !== "todos" ? 600 : 400, outline: "none", cursor: "pointer", minHeight: 44 }}>
+          <option value="todos">Todas las prioridades</option>
+          <option value="A">Prioridad A · Alta</option>
+          <option value="B">Prioridad B · Media</option>
+          <option value="C">Prioridad C · Baja</option>
+          <option value="sin_prioridad">Sin prioridad</option>
+        </select>
+        <select aria-label="Ordenar leads" value={sortLeads} onChange={e => setSortLeads(e.target.value)} style={{ background: C.bg, border: `1px solid ${sortLeads !== "original" ? C.bl : C.b}`, borderRadius: 10, padding: "9px 12px", color: sortLeads !== "original" ? C.bl : C.tx, fontSize: 12, fontFamily: F, fontWeight: sortLeads !== "original" ? 600 : 400, outline: "none", cursor: "pointer", minHeight: 44 }}>
+          <option value="original">Orden original</option>
+          <option value="priority_desc">Ordenar A → B → C</option>
+          <option value="priority_asc">Ordenar C → B → A</option>
+          <option value="score_desc">Mayor score primero</option>
+        </select>
+        {hasActiveFilters && <Btn onClick={clearFilters} v="ghost" sz="sm" style={{ minHeight: 44 }}>✕ Limpiar filtros</Btn>}
+      </div>
+
+      <div aria-live="polite" style={{ fontSize: 10, color: C.tm, margin: "-8px 0 12px" }}>
+        Mostrando {filtered.length} de {visibleLeads.length} leads
       </div>
 
       {/* Leads list */}
