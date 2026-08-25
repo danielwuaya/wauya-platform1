@@ -80,9 +80,6 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
   }, [visibleLeads]);
 
   const updStatus = async (lead, status) => {
-    if (status === "escrito" && lead.contact_eligibility !== "eligible") {
-      showToast("Documenta la elegibilidad antes de registrar contacto", "error"); return;
-    }
     try {
       const { error } = await supabase.rpc("transition_cold_lead", { p_lead_id: String(lead.id), p_status: status, p_actor_id: currentUser?.id ? String(currentUser.id) : null });
       if (error) throw error;
@@ -263,7 +260,7 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
                 {lead.problem && <div style={{ fontSize: 10, color: C.td, marginTop: 6, fontStyle: "italic" }}>💡 {lead.problem.slice(0, 120)}{lead.problem.length > 120 ? "..." : ""}</div>}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-                {lead.contact_eligibility === "ineligible" && <div style={{ fontSize: 9, fontWeight: 700, color: C.r }}>⛔ No contactar</div>}
+                {(lead.do_not_contact || lead.unsubscribed_at) && <div style={{ fontSize: 9, fontWeight: 700, color: C.r }}>⛔ Baja registrada</div>}
                 <select value={lead.outbound_status} onChange={e => updStatus(lead, e.target.value)} style={{ background: st.color + "15", border: `1px solid ${st.color}40`, borderRadius: 8, padding: "6px 10px", color: st.color, fontSize: 11, fontWeight: 600, fontFamily: F, outline: "none", cursor: "pointer" }}>
                   {OUTBOUND_STATUS.map(s => <option key={s.value} value={s.value} style={{ background: C.s, color: C.tx }}>{s.icon} {s.label}</option>)}
                 </select>
@@ -362,42 +359,25 @@ function MsgBlock({ label, text, onCopied }) {
 function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, showToast }) {
   const [notes, setNotes] = useState(lead.notes || "");
   const [activities, setActivities] = useState([]);
-  const [eligibility, setEligibility] = useState(lead.contact_eligibility || "review_required");
-  const [basis, setBasis] = useState(lead.consent_basis || "unknown");
-  const [eligibilityNotes, setEligibilityNotes] = useState(lead.eligibility_notes || "");
-  const [consentSource, setConsentSource] = useState(lead.consent_source || "");
-  const [consentCapturedAt, setConsentCapturedAt] = useState(lead.consent_captured_at?.slice(0, 10) || "");
-  const [consentExpiresAt, setConsentExpiresAt] = useState(lead.consent_expires_at?.slice(0, 10) || "");
   const [activity, setActivity] = useState({ activity_type: "note", channel: "other", notes: "" });
-  const canContact = lead.contact_eligibility === "eligible" && !lead.do_not_contact && !lead.unsubscribed_at;
+  const isBlocked = Boolean(lead.do_not_contact || lead.unsubscribed_at);
   const loadActivities = async () => {
     const { data } = await supabase.from("cold_lead_activities").select("*").eq("lead_id", String(lead.id)).order("occurred_at", { ascending: false }).limit(30);
     setActivities(data || []);
   };
   useEffect(() => { loadActivities(); }, [lead.id]);
-  const saveEligibility = async () => {
-    const { error } = await supabase.rpc("review_cold_lead_eligibility", {
-      p_lead_id: String(lead.id), p_eligibility: eligibility, p_consent_basis: basis,
-      p_notes: eligibilityNotes || null, p_consent_source: consentSource || null,
-      p_consent_captured_at: consentCapturedAt ? `${consentCapturedAt}T00:00:00Z` : null,
-      p_consent_expires_at: consentExpiresAt ? `${consentExpiresAt}T23:59:59Z` : null,
-      p_actor_id: actorId ? String(actorId) : null,
-    });
-    if (error) { showToast(error.message, "error"); return; }
-    showToast("Revisión de elegibilidad auditada"); onReload(); onClose();
-  };
   const markUnsubscribed = async () => {
     if (!confirm("¿Registrar una baja/no contactar? Esto bloqueará futuros contactos.")) return;
     const { error } = await supabase.rpc("mark_cold_lead_unsubscribed", {
-      p_lead_id: String(lead.id), p_notes: eligibilityNotes || null, p_actor_id: actorId ? String(actorId) : null,
+      p_lead_id: String(lead.id), p_notes: notes.trim() || null, p_actor_id: actorId ? String(actorId) : null,
     });
     if (error) { showToast(error.message, "error"); return; }
     showToast("Baja registrada; contacto bloqueado"); onReload(); onClose();
   };
   const addActivity = async () => {
     if (!activity.notes.trim()) return;
-    if (activity.activity_type === "contact_attempt" && !canContact) {
-      showToast("El contacto requiere elegibilidad revisada", "error"); return;
+    if (activity.activity_type === "contact_attempt" && isBlocked) {
+      showToast("Este lead tiene una baja registrada", "error"); return;
     }
     const { error } = await supabase.from("cold_lead_activities").insert({
       lead_id: String(lead.id), activity_type: activity.activity_type,
@@ -410,28 +390,12 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
   };
   const field = (label, value) => value && value !== "No encontrado públicamente" ? <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>{label}</div><div style={{ fontSize: 12, color: C.tx, marginTop: 2 }}>{value}</div></div> : null;
   return <ModalWrap title={lead.company} onClose={onClose} w={620}>
-    <div style={{ background: C.s2, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: C.tx, marginBottom: 4 }}>Control de contacto saliente</div>
-      <div style={{ fontSize: 10, color: C.tm, marginBottom: 8 }}>La ficha y los datos públicos siempre son visibles. Completa esta sección únicamente antes de registrar un mensaje comercial.</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        <select value={eligibility} onChange={e => setEligibility(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }}>
-          <option value="review_required">Revisión requerida</option><option value="eligible">Elegible</option><option value="ineligible">No elegible</option><option value="expired">Base expirada</option>
-        </select>
-        <select value={basis} onChange={e => setBasis(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }}>
-          <option value="unknown">Base desconocida</option><option value="express">Consentimiento expreso</option><option value="implied">Consentimiento implícito</option><option value="existing_business_relationship">Relación comercial existente</option><option value="inquiry">Consulta recibida</option><option value="other">Otra base documentada</option>
-        </select>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginTop: 8 }}>
-        <input value={consentSource} onChange={e => setConsentSource(e.target.value)} placeholder="Fuente/evidencia de la base" style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }} />
-        <input type="date" value={consentCapturedAt} onChange={e => setConsentCapturedAt(e.target.value)} title="Fecha de obtención" style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }} />
-        <input type="date" value={consentExpiresAt} onChange={e => setConsentExpiresAt(e.target.value)} title="Vencimiento cuando aplique" style={{ background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx }} />
-      </div>
-      <textarea value={eligibilityNotes} onChange={e => setEligibilityNotes(e.target.value)} placeholder="Evidencia, alcance y fecha de la revisión..." style={{ width: "100%", marginTop: 8, background: C.bg, border: `1px solid ${C.b}`, borderRadius: 8, padding: 8, color: C.tx, minHeight: 50 }} />
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginTop: 8 }}><span style={{ fontSize: 9, color: C.td }}>La baja y el registro de auditoría siguen siendo obligatorios antes de cualquier automatización.</span><div style={{ display: "flex", gap: 6 }}><Btn onClick={markUnsubscribed} v="secondary" sz="sm" style={{ color: C.r }}>Registrar baja</Btn><Btn onClick={saveEligibility} sz="sm">Guardar revisión</Btn></div></div>
-    </div>
     {/* Canales de contacto */}
     <div style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Cómo contactar</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em" }}>Cómo contactar</div>
+        {!isBlocked && <Btn onClick={markUnsubscribed} v="ghost" sz="sm" style={{ color: C.r }}>Marcar no contactar</Btn>}
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {lead.whatsapp && lead.whatsapp.length > 4 && <div style={{ fontSize: 13, color: "#25D366" }}>💬 WhatsApp: {lead.whatsapp}</div>}
         {lead.email && lead.email.includes("@") ? <div style={{ fontSize: 13, color: C.acc }}>✉️ {lead.email}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
@@ -458,7 +422,7 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
     {/* MENSAJES LISTOS PARA COPIAR */}
     {(lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.acc, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>📋 Borradores disponibles</div>
-      <div style={{ fontSize: 9, color: C.td, marginBottom: 10 }}>Puedes consultar y copiar estos textos. Verifica la base aplicable antes de utilizarlos para contacto comercial.</div>
+      <div style={{ fontSize: 9, color: C.td, marginBottom: 10 }}>Puedes consultar, copiar y personalizar estos textos antes de utilizarlos.</div>
       {/* Email */}
       {(lead.email_subject || lead.email_body) && <div style={{ background: C.acc + "0A", border: `1px solid ${C.acc}30`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
