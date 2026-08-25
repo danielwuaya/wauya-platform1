@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import { buildLeadRows } from "./leadImport.js";
 import { filterAndSortLeads } from "./leadFilters.js";
+import { downloadLeadsExcel } from "./leadExport.js";
 
 const C = { bg:"#060B18",s:"#0A1428",s2:"#0F1D38",b:"#1A2D52",tx:"#F0F0F4",tm:"#8A94A8",td:"#4A5568",acc:"#F8BA10",r:"#FF4D6A",g:"#36DE67",w:"#FFC107",p:"#4A90D9",bl:"#60A5FA",blBg:"#0A1633" };
 const F = "'Poppins', sans-serif", D = "'Playfair Display', serif";
@@ -131,6 +132,15 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
     setSortLeads("original");
   };
 
+  const exportAllLeads = () => {
+    if (visibleLeads.length === 0) {
+      showToast("No hay leads para descargar", "error");
+      return;
+    }
+    downloadLeadsExcel(visibleLeads, employees);
+    showToast(`${visibleLeads.length} leads descargados en Excel`);
+  };
+
   return (
     <div style={{ animation: "fadeUp .3s ease" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
@@ -138,10 +148,13 @@ export default function ColdLeads({ leads = [], employees = [], currentUser = nu
           <h1 style={{ fontFamily: D, fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.tx, letterSpacing: "-.02em" }}>{isSeller ? "Mi CRM" : "Leads Fríos"}</h1>
           <p style={{ fontSize: 12, color: C.td }}>{isSeller ? "Tu pipeline de prospección" : `Prospección outbound · ${visibleLeads.length} leads`}</p>
         </div>
-        {!isSeller && <div style={{ display: "flex", gap: 6 }}>
-          <Btn onClick={() => setModal({ type: "folders" })} v="secondary">📁 Carpetas</Btn>
-          <Btn onClick={() => setModal({ type: "import" })}>+ Importar lote</Btn>
-        </div>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Btn onClick={exportAllLeads} v="secondary" disabled={visibleLeads.length === 0}>⬇ Descargar Excel</Btn>
+          {!isSeller && <>
+            <Btn onClick={() => setModal({ type: "folders" })} v="secondary">📁 Carpetas</Btn>
+            <Btn onClick={() => setModal({ type: "import" })}>+ Importar lote</Btn>
+          </>}
+        </div>
       </div>
 
       {/* Métricas por vendedor (solo admin) */}
