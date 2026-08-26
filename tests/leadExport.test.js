@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildLeadsExcelXml } from "../src/leadExport.js";
 
-test("genera una hoja de Excel con todos los leads y el vendedor", () => {
+test("genera una hoja de Excel reutilizable con el formato completo de Cold Leads", () => {
   const xml = buildLeadsExcelXml([
     { id: "1", company: "Taller & Motor", priority: "A", email: "ventas@taller.ca", assigned_seller: "7" },
     { id: "2", company: "Clínica Norte", priority: "B", do_not_contact: true },
@@ -11,8 +11,10 @@ test("genera una hoja de Excel con todos los leads y el vendedor", () => {
   assert.match(xml, /Excel\.Sheet/);
   assert.match(xml, /Taller &amp; Motor/);
   assert.match(xml, /Clínica Norte/);
-  assert.match(xml, /Ana Gómez/);
-  assert.match(xml, /<Data ss:Type="String">Sí<\/Data>/);
+  assert.match(xml, /Google Maps Link/);
+  assert.match(xml, /AI Sales Angle/);
+  assert.match(xml, /Final Email/);
+  assert.match(xml, /ventas@taller\.ca/);
   assert.equal((xml.match(/<Row>/g) || []).length, 3);
 });
 
@@ -21,4 +23,3 @@ test("escapa contenido para producir XML válido", () => {
   assert.doesNotMatch(xml, /<script>/);
   assert.match(xml, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
 });
-
