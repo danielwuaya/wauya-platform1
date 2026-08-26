@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "./supabase.js";
-import { buildLeadRows } from "./leadImport.js";
+import { buildLeadRows, chunkLeadRows } from "./leadImport.js";
 import { filterAndSortLeads } from "./leadFilters.js";
 import { downloadLeadsExcel } from "./leadExport.js";
 
@@ -22,7 +22,7 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
   let data = null, selectedTab = "first_sheet", lastErr = "";
   for (const tab of tabs) {
     try {
-      const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=${encodeURIComponent(tab)}!A1:AZ200`);
+      const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=${encodeURIComponent(tab)}!A1:AZ5000`);
       const j = await r.json();
       if (j.error) { lastErr = j.error; continue; }
       if (Array.isArray(j) && j.length > 1) { data = j; selectedTab = tab; break; }
@@ -31,7 +31,7 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
   // Fallback: primera hoja sin importar el nombre
   if (!data) {
     try {
-      const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=A1:AZ200`);
+      const r = await fetch(`/api/sheets?sheetId=${sheetId}&range=A1:AZ5000`);
       const j = await r.json();
       if (Array.isArray(j) && j.length > 1) data = j;
       else if (j.error) lastErr = j.error;
@@ -42,9 +42,15 @@ async function readLeadsSheet(sheetId, batch, assignSeller) {
 }
 
 async function importLeads(rows, actorId) {
-  const { data, error } = await supabase.rpc("import_cold_leads", { p_leads: rows, p_actor_id: actorId ? String(actorId) : null });
-  if (error) throw error;
-  return data || { inserted: rows.length, updated: 0, total: rows.length };
+  const total = { inserted: 0, updated: 0, total: 0 };
+  for (const chunk of chunkLeadRows(rows)) {
+    const { data, error } = await supabase.rpc("import_cold_leads", { p_leads: chunk, p_actor_id: actorId ? String(actorId) : null });
+    if (error) throw error;
+    total.inserted += data?.inserted || 0;
+    total.updated += data?.updated || 0;
+    total.total += data?.total || chunk.length;
+  }
+  return total;
 }
 
 function Btn({ children, onClick, v = "primary", sz = "md", disabled, style: sx }) { const b = { display: "inline-flex", alignItems: "center", gap: 7, border: "none", cursor: disabled ? "not-allowed" : "pointer", fontFamily: F, fontWeight: 600, borderRadius: 10, transition: "all .2s", opacity: disabled ? .35 : 1, whiteSpace: "nowrap", fontSize: sz === "sm" ? 11 : 13, padding: sz === "sm" ? "6px 12px" : "9px 18px" }; const vs = { primary: { background: `linear-gradient(135deg,${C.acc},#D4A00E)`, color: "#060B18" }, secondary: { background: C.s2, color: C.tx, border: `1px solid ${C.b}` }, ghost: { background: "transparent", color: C.tm } }; return <button onClick={onClick} disabled={disabled} style={{ ...b, ...vs[v], ...sx }}>{children}</button>; }
@@ -374,6 +380,8 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
   const [activities, setActivities] = useState([]);
   const [activity, setActivity] = useState({ activity_type: "note", channel: "other", notes: "" });
   const isBlocked = Boolean(lead.do_not_contact || lead.unsubscribed_at);
+  const emailSubject = lead.final_subject || lead.email_subject || "";
+  const emailBody = lead.final_email || lead.email_body || "";
   const loadActivities = async () => {
     const { data } = await supabase.from("cold_lead_activities").select("*").eq("lead_id", String(lead.id)).order("occurred_at", { ascending: false }).limit(30);
     setActivities(data || []);
@@ -419,13 +427,22 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
       </div>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-      {field("Industria", lead.industry)}{field("Ciudad", lead.city)}
-      {field("Dirección", lead.address)}{field("Propietario", lead.owner_name)}
-      {field("Cargo", lead.owner_role)}{field("Estado web", lead.website_status)}
+      {field("Industria", lead.industry)}{field("País", lead.country)}
+      {field("Ciudad", lead.city)}{field("Dirección", lead.address)}
+      {field("Propietario", lead.owner_name)}{field("Cargo", lead.owner_role)}
+      {field("Estado web", lead.website_status)}{field("Estado de envío", lead.send_status)}
     </div>
+    {lead.maps_url && <a href={lead.maps_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", fontSize: 11, color: C.bl, marginBottom: 12 }}>📍 Abrir Google Maps ↗</a>}
     {field("Problema detectado", lead.problem)}
     {field("Oportunidad estratégica", lead.opportunity)}
     {field("Solución recomendada", lead.recommended_solution)}
+    {(lead.ai_decision || lead.ai_reason || lead.ai_sales_angle || lead.reply_status) && <div style={{ background: C.blBg, borderRadius: 10, border: `1px solid ${C.bl}25`, padding: 12, marginBottom: 16 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.bl, textTransform: "uppercase", marginBottom: 8 }}>Información de la base</div>
+      {field("AI Decision", lead.ai_decision)}
+      {field("AI Reason", lead.ai_reason)}
+      {field("AI Sales Angle", lead.ai_sales_angle)}
+      {field("Reply Status", lead.reply_status)}
+    </div>}
     <div style={{ background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, padding: 12, marginBottom: 16 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", marginBottom: 6 }}>Procedencia y evidencia</div>
       <div style={{ fontSize: 11, color: C.tx }}>{lead.source_system || "legacy/manual"}{lead.source_external_id ? ` · ${lead.source_external_id}` : ""}</div>
@@ -433,24 +450,24 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
       <div style={{ fontSize: 10, color: C.td, marginTop: 4 }}>Enriquecimiento: {lead.enrichment_status || "no iniciado"}</div>
     </div>
     {/* MENSAJES LISTOS PARA COPIAR */}
-    {(lead.email_subject || lead.email_body || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
+    {(emailSubject || emailBody || lead.initial_message || lead.followup_1 || lead.whatsapp_message) && <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.acc, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>📋 Borradores disponibles</div>
       <div style={{ fontSize: 9, color: C.td, marginBottom: 10 }}>Puedes consultar, copiar y personalizar estos textos antes de utilizarlos.</div>
       {/* Email */}
-      {(lead.email_subject || lead.email_body) && <div style={{ background: C.acc + "0A", border: `1px solid ${C.acc}30`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+      {(emailSubject || emailBody) && <div style={{ background: C.acc + "0A", border: `1px solid ${C.acc}30`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: C.acc }}>✉️ Email inicial</span>
-          <button onClick={() => { navigator.clipboard.writeText((lead.email_subject ? `Asunto: ${lead.email_subject}\n\n` : "") + (lead.email_body || "")); onCopied && onCopied(); }} style={{ background: C.acc, border: "none", borderRadius: 8, padding: "5px 12px", color: "#060B18", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: F }}>📋 Copiar todo</button>
+          <button onClick={() => { navigator.clipboard.writeText((emailSubject ? `Asunto: ${emailSubject}\n\n` : "") + emailBody); onCopied && onCopied(); }} style={{ background: C.acc, border: "none", borderRadius: 8, padding: "5px 12px", color: "#060B18", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: F }}>📋 Copiar todo</button>
         </div>
-        {lead.email_subject && <div style={{ marginBottom: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}><span style={{ fontSize: 9, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Asunto</span><button onClick={() => { navigator.clipboard.writeText(lead.email_subject); onCopied && onCopied(); }} style={{ background: "none", border: "none", color: C.acc, fontSize: 9, cursor: "pointer", fontFamily: F }}>copiar</button></div>
-          <div style={{ fontSize: 12, color: C.tx, background: C.bg, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.b}` }}>{lead.email_subject}</div>
+        {emailSubject && <div style={{ marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}><span style={{ fontSize: 9, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Asunto</span><button onClick={() => { navigator.clipboard.writeText(emailSubject); onCopied && onCopied(); }} style={{ background: "none", border: "none", color: C.acc, fontSize: 9, cursor: "pointer", fontFamily: F }}>copiar</button></div>
+          <div style={{ fontSize: 12, color: C.tx, background: C.bg, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.b}` }}>{emailSubject}</div>
         </div>}
-        {lead.email_body && <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}><span style={{ fontSize: 9, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Cuerpo</span><button onClick={() => { navigator.clipboard.writeText(lead.email_body); onCopied && onCopied(); }} style={{ background: "none", border: "none", color: C.acc, fontSize: 9, cursor: "pointer", fontFamily: F }}>copiar</button></div>
-          <div style={{ fontSize: 12, color: C.tx, background: C.bg, padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.b}`, lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>{lead.email_body}</div>
+        {emailBody && <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}><span style={{ fontSize: 9, fontWeight: 600, color: C.tm, textTransform: "uppercase" }}>Cuerpo</span><button onClick={() => { navigator.clipboard.writeText(emailBody); onCopied && onCopied(); }} style={{ background: "none", border: "none", color: C.acc, fontSize: 9, cursor: "pointer", fontFamily: F }}>copiar</button></div>
+          <div style={{ fontSize: 12, color: C.tx, background: C.bg, padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.b}`, lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>{emailBody}</div>
         </div>}
-        {lead.email && lead.email.includes("@") && <a href={`mailto:${lead.email}?subject=${encodeURIComponent(lead.email_subject || "")}&body=${encodeURIComponent(lead.email_body || "")}`} style={{ display: "inline-block", marginTop: 8, fontSize: 11, color: C.acc, textDecoration: "none", fontWeight: 600 }}>✉️ Abrir en correo →</a>}
+        {lead.email && lead.email.includes("@") && <a href={`mailto:${lead.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`} style={{ display: "inline-block", marginTop: 8, fontSize: 11, color: C.acc, textDecoration: "none", fontWeight: 600 }}>✉️ Abrir en correo →</a>}
       </div>}
       {/* Mensaje inicial IG/DM */}
       {lead.initial_message && <MsgBlock label="📷 Mensaje inicial (Instagram/DM)" text={lead.initial_message} onCopied={onCopied} />}
