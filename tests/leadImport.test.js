@@ -1,21 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLeadRows, chunkLeadRows, deduplicateLeadRows, leadIdentityKey, normalizeOutboundStatus } from "../src/leadImport.js";
+import { buildLeadRows, chunkLeadRows, cleanPhoneValue, deduplicateLeadRows, leadIdentityKey, normalizeOutboundStatus } from "../src/leadImport.js";
 
-test("identity prefers normalized email, then phone, then company and city", () => {
+test("identity keeps separate branches even when they share contact details", () => {
+  assert.equal(leadIdentityKey({ company: "Clínica Norte", city: "Guayaquil", address: "Av. 1" }), "business:clinica norte|guayaquil|av 1");
+  assert.notEqual(
+    leadIdentityKey({ company: "Taller Uno", city: "Durham", address: "100 Main", phone: "+1 919 555 0100" }),
+    leadIdentityKey({ company: "Taller Dos", city: "Durham", address: "200 Main", phone: "+1 919 555 0100" }),
+  );
   assert.equal(leadIdentityKey({ email: " SALES@Example.COM " }), "email:sales@example.com");
-  assert.equal(leadIdentityKey({ phone: "+1 (905) 555-0100" }), "phone:19055550100");
-  assert.equal(leadIdentityKey({ company: "Clínica Norte", city: "Guayaquil" }), "company:clinica norte|guayaquil");
 });
 
 test("deduplication is deterministic and keeps the last enriched occurrence", () => {
   const rows = deduplicateLeadRows([
     { company: "A", email: "a@example.com", city: "Quito", problem: "old" },
-    { company: "A SA", email: "A@example.com", city: "Quito", problem: "new" },
+    { company: "A", email: "A@example.com", city: "Quito", problem: "new" },
   ]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].problem, "new");
-  assert.equal(rows[0].dedupe_key, "email:a@example.com");
+  assert.equal(rows[0].dedupe_key, "business:a|quito|");
 });
 
 test("sheet parsing records stable provenance and defaults CASL review to required", () => {
@@ -87,4 +90,10 @@ test("normalizes spreadsheet statuses and splits large imports", () => {
   assert.equal(normalizeOutboundStatus("", "Replied"), "respondio");
   assert.equal(normalizeOutboundStatus("Pending", ""), "sin_contactar");
   assert.deepEqual(chunkLeadRows(Array.from({ length: 1001 }), 500).map(chunk => chunk.length), [500, 500, 1]);
+});
+
+test("recovers phone-like formulas and rejects spreadsheet errors", () => {
+  assert.equal(cleanPhoneValue("=+1 905-688-4760"), "+1 905-688-4760");
+  assert.equal(cleanPhoneValue("#NAME?"), "");
+  assert.equal(cleanPhoneValue("No encontrado"), "");
 });

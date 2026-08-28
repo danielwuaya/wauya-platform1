@@ -18,7 +18,7 @@ const OUTBOUND_STATUS = [
 
 // Lee un Google Sheet de leads y devuelve las filas parseadas
 async function readLeadsSheet(sheetId, batch, assignSeller) {
-  const tabs = ["Leads", "Hoja1", "Sheet1", "Prospeccion", "Hoja 1", "Sheet 1"];
+  const tabs = ["Leads_Master", "Leads", "Hoja1", "Sheet1", "Prospeccion", "Hoja 1", "Sheet 1"];
   let data = null, selectedTab = "first_sheet", lastErr = "";
   for (const tab of tabs) {
     try {
@@ -349,7 +349,7 @@ function ImportModal({ sellers = [], actorId, onClose, onReload, showToast }) {
       <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Nombre del lote</label><input value={batch} onChange={e => setBatch(e.target.value)} placeholder="Ej: Niágara Automotriz Lote 01" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
       {sellers.length > 0 && <div><label style={{ fontSize: 11, fontWeight: 600, color: C.g, fontFamily: F }}>Asignar a vendedor</label><select value={assignSeller} onChange={e => setAssignSeller(e.target.value)} style={{ width: "100%", background: C.bg, border: `1px solid ${assignSeller ? C.g : C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6, cursor: "pointer" }}><option value="">— Sin asignar (visible solo para admin) —</option>{sellers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><p style={{ fontSize: 10, color: C.td, marginTop: 4 }}>Estos leads aparecerán en el CRM de ese vendedor.</p></div>}
       <div><label style={{ fontSize: 11, fontWeight: 600, color: C.tm, fontFamily: F }}>Link del Google Sheet</label><input value={link} onChange={e => setLink(e.target.value)} placeholder="Pega el link del Sheet con los leads" style={{ width: "100%", background: C.bg, border: `1px solid ${C.b}`, borderRadius: 10, padding: "10px 14px", color: C.tx, fontSize: 13, fontFamily: F, outline: "none", marginTop: 6 }} /></div>
-      <div style={{ background: C.blBg, borderRadius: 10, padding: 12, border: `1px solid ${C.bl}25`, fontSize: 11, color: C.tm, lineHeight: 1.6 }}>El Sheet debe ser Google Sheet nativo (no .xlsx), compartido como "Cualquiera con el enlace → Lector", con una pestaña "Leads". La plataforma detecta las columnas automáticamente por nombre.</div>
+      <div style={{ background: C.blBg, borderRadius: 10, padding: 12, border: `1px solid ${C.bl}25`, fontSize: 11, color: C.tm, lineHeight: 1.6 }}>Usa un Google Sheet compartido como "Cualquiera con el enlace → Lector". La plataforma reconoce automáticamente las pestañas "Leads_Master" o "Leads" y lee las 34 columnas completas por nombre.</div>
       {!preview ? <Btn onClick={readSheet} disabled={!link || loading}>{loading ? "Leyendo..." : "Leer y previsualizar"}</Btn>
         : <div>
           <div style={{ background: C.g + "10", border: `1px solid ${C.g}30`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
@@ -387,14 +387,6 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
     setActivities(data || []);
   };
   useEffect(() => { loadActivities(); }, [lead.id]);
-  const markUnsubscribed = async () => {
-    if (!confirm("¿Registrar una baja/no contactar? Esto bloqueará futuros contactos.")) return;
-    const { error } = await supabase.rpc("mark_cold_lead_unsubscribed", {
-      p_lead_id: String(lead.id), p_notes: notes.trim() || null, p_actor_id: actorId ? String(actorId) : null,
-    });
-    if (error) { showToast(error.message, "error"); return; }
-    showToast("Baja registrada; contacto bloqueado"); onReload(); onClose();
-  };
   const addActivity = async () => {
     if (!activity.notes.trim()) return;
     if (activity.activity_type === "contact_attempt" && isBlocked) {
@@ -413,16 +405,14 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
   return <ModalWrap title={lead.company} onClose={onClose} w={620}>
     {/* Canales de contacto */}
     <div style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.b}`, padding: 14, marginBottom: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em" }}>Cómo contactar</div>
-        {!isBlocked && <Btn onClick={markUnsubscribed} v="ghost" sz="sm" style={{ color: C.r }}>Marcar no contactar</Btn>}
-      </div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Cómo contactar</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {lead.whatsapp && lead.whatsapp.length > 4 && <div style={{ fontSize: 13, color: "#25D366" }}>💬 WhatsApp: {lead.whatsapp}</div>}
         {lead.email && lead.email.includes("@") ? <div style={{ fontSize: 13, color: C.acc }}>✉️ {lead.email}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin email</div>}
         {lead.phone && lead.phone.length > 4 ? <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.g }}>📞 {lead.phone}</div> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin teléfono</div>}
         {lead.instagram && lead.instagram.startsWith("http") ? <a href={lead.instagram} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#E1306C", textDecoration: "none" }}>📷 Instagram ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Instagram</div>}
         {lead.facebook && lead.facebook.startsWith("http") ? <a href={lead.facebook} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#1877F2", textDecoration: "none" }}>📘 Facebook ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin Facebook</div>}
+        {lead.linkedin && lead.linkedin.startsWith("http") ? <a href={lead.linkedin} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.bl, textDecoration: "none" }}>💼 LinkedIn empresa ↗</a> : <div style={{ fontSize: 12, color: C.td }}>✕ Sin LinkedIn</div>}
         {lead.rating && <div style={{ fontSize: 12, color: C.w }}>⭐ Rating Google: {lead.rating}</div>}
       </div>
     </div>
@@ -430,18 +420,28 @@ function DetailModal({ lead, actorId, onClose, onReload, onSaveNotes, onCopied, 
       {field("Industria", lead.industry)}{field("País", lead.country)}
       {field("Ciudad", lead.city)}{field("Dirección", lead.address)}
       {field("Propietario", lead.owner_name)}{field("Cargo", lead.owner_role)}
-      {field("Estado web", lead.website_status)}{field("Estado de envío", lead.send_status)}
+      {field("Estado web", lead.website_status)}{field("Prioridad", lead.priority)}
+      {field("Lead Score", lead.lead_score)}{field("Estado de envío", lead.send_status)}
+      {field("Fecha de envío", lead.sent_at ? new Date(lead.sent_at).toLocaleString() : "")}{field("Base de origen", lead.source_base)}
     </div>
     {lead.maps_url && <a href={lead.maps_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", fontSize: 11, color: C.bl, marginBottom: 12 }}>📍 Abrir Google Maps ↗</a>}
     {field("Problema detectado", lead.problem)}
     {field("Oportunidad estratégica", lead.opportunity)}
     {field("Solución recomendada", lead.recommended_solution)}
+    {field("Observaciones", lead.observations)}
     {(lead.ai_decision || lead.ai_reason || lead.ai_sales_angle || lead.reply_status) && <div style={{ background: C.blBg, borderRadius: 10, border: `1px solid ${C.bl}25`, padding: 12, marginBottom: 16 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.bl, textTransform: "uppercase", marginBottom: 8 }}>Información de la base</div>
       {field("AI Decision", lead.ai_decision)}
       {field("AI Reason", lead.ai_reason)}
       {field("AI Sales Angle", lead.ai_sales_angle)}
       {field("Reply Status", lead.reply_status)}
+    </div>}
+    {(lead.email_subject || lead.email_body || lead.final_subject || lead.final_email) && <div style={{ background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, padding: 12, marginBottom: 16 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", marginBottom: 8 }}>Campos de email de la base</div>
+      {field("Asunto de email", lead.email_subject)}
+      {field("Email inicial", lead.email_body)}
+      {field("Final Subject", lead.final_subject)}
+      {field("Final Email", lead.final_email)}
     </div>}
     <div style={{ background: C.bg, borderRadius: 10, border: `1px solid ${C.b}`, padding: 12, marginBottom: 16 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: C.tm, textTransform: "uppercase", marginBottom: 6 }}>Procedencia y evidencia</div>

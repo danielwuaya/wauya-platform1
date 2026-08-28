@@ -1,5 +1,20 @@
 const empty = value => String(value ?? "").trim();
 
+const isSpreadsheetError = value => /^#(?:NAME\?|ERROR!|REF!|VALUE!|N\/A|DIV\/0!)$/i.test(empty(value));
+const isMissingValue = value => /^(?:no encontrado(?: publicamente| públicamente)?|not found|n\/a|null|undefined)$/i.test(empty(value));
+
+export function cleanPhoneValue(value) {
+  const text = empty(value);
+  if (!text || isSpreadsheetError(text) || isMissingValue(text)) return "";
+  const recoveredFormula = text.startsWith("=") ? text.slice(1).trim() : text;
+  return /^\+?[\d\s().-]{7,}$/.test(recoveredFormula) ? recoveredFormula : text;
+}
+
+function cleanUrlValue(value) {
+  const text = empty(value);
+  return !text || isSpreadsheetError(text) || isMissingValue(text) ? "" : text;
+}
+
 const normalizedHeader = value => empty(value)
   .replace(/^\*+|\*+$/g, "")
   .normalize("NFD")
@@ -40,7 +55,8 @@ export function chunkLeadRows(rows, size = 500) {
 }
 
 export function normalizeEmail(value) {
-  return empty(value).toLowerCase();
+  const email = empty(value).toLowerCase();
+  return email.includes("@") && !isSpreadsheetError(email) ? email : "";
 }
 
 export function normalizePhone(value) {
@@ -57,18 +73,21 @@ export function normalizeName(value) {
 }
 
 export function leadIdentityKey(lead) {
+  const company = normalizeName(lead.company);
+  if (company) {
+    return `business:${company}|${normalizeName(lead.city)}|${normalizeName(lead.address)}`;
+  }
   const email = normalizeEmail(lead.email);
-  if (email && email.includes("@")) return `email:${email}`;
+  if (email) return `email:${email}`;
   const phone = normalizePhone(lead.whatsapp || lead.phone);
-  if (phone.length >= 7) return `phone:${phone}`;
-  return `company:${normalizeName(lead.company)}|${normalizeName(lead.city)}`;
+  return phone.length >= 7 ? `phone:${phone}` : "";
 }
 
 export function deduplicateLeadRows(rows) {
   const unique = new Map();
   for (const row of rows) {
     const dedupeKey = leadIdentityKey(row);
-    if (!dedupeKey.endsWith(":")) unique.set(dedupeKey, { ...row, dedupe_key: dedupeKey });
+    if (dedupeKey) unique.set(dedupeKey, { ...row, dedupe_key: dedupeKey });
   }
   return [...unique.values()];
 }
@@ -144,6 +163,7 @@ export function buildLeadRows(data, { batch, assignSeller, sheetId, tab }) {
       const evidenceUrl = empty(value(row, idx.evidence_url));
       const noWebsiteEvidence = empty(value(row, idx.no_website_evidence));
       const websiteUrl = empty(value(row, idx.website_url));
+      const cleanWebsiteUrl = cleanUrlValue(websiteUrl);
       const optOutStatus = empty(value(row, idx.opt_out_status)).toLowerCase();
       const aiSalesAngle = empty(value(row, idx.ai_sales_angle));
       const sourceBase = empty(value(row, idx.source_base));
@@ -151,9 +171,9 @@ export function buildLeadRows(data, { batch, assignSeller, sheetId, tab }) {
       const replyStatus = empty(value(row, idx.reply_status));
       return ({
       lead_id: empty(value(row, idx.lead_id)), company: empty(row[companyIdx]), industry: empty(value(row, idx.industry)),
-      city: empty(value(row, idx.city)), address: empty(value(row, idx.address)), phone: empty(value(row, idx.phone)),
-      email: normalizeEmail(value(row, idx.email)), instagram: empty(value(row, idx.instagram)), facebook: empty(value(row, idx.facebook)),
-      linkedin: empty(value(row, idx.linkedin)), owner_name: empty(value(row, idx.owner)), owner_role: empty(value(row, idx.role)),
+      city: empty(value(row, idx.city)), address: empty(value(row, idx.address)), phone: cleanPhoneValue(value(row, idx.phone)),
+      email: normalizeEmail(value(row, idx.email)), instagram: cleanUrlValue(value(row, idx.instagram)), facebook: cleanUrlValue(value(row, idx.facebook)),
+      linkedin: cleanUrlValue(value(row, idx.linkedin)), owner_name: empty(value(row, idx.owner)), owner_role: empty(value(row, idx.role)),
       website_status: empty(value(row, idx.website)), problem: empty(value(row, idx.problem)), opportunity: empty(value(row, idx.opportunity)) || aiSalesAngle,
       recommended_solution: empty(value(row, idx.solution)), priority: empty(value(row, idx.priority)),
       lead_score: Number.parseFloat(value(row, idx.score)) || 0, initial_message: empty(value(row, idx.message)),
@@ -161,10 +181,10 @@ export function buildLeadRows(data, { batch, assignSeller, sheetId, tab }) {
       outbound_status: sendStatus || replyStatus ? normalizeOutboundStatus(sendStatus, replyStatus) : null,
       email_subject: empty(value(row, idx.email_subject)), email_body: empty(value(row, idx.email_body)),
       followup_1: empty(value(row, idx.followup_1)), followup_2: empty(value(row, idx.followup_2)),
-      whatsapp: empty(value(row, idx.whatsapp)), rating: empty(value(row, idx.rating)), whatsapp_message: empty(value(row, idx.whatsapp_msg)),
+      whatsapp: cleanPhoneValue(value(row, idx.whatsapp)), rating: empty(value(row, idx.rating)), whatsapp_message: empty(value(row, idx.whatsapp_msg)),
       country: empty(value(row, idx.country)), province: empty(value(row, idx.province)),
-      website_url: websiteUrl, maps_url: empty(value(row, idx.maps)),
-      has_website: Boolean(websiteUrl),
+      website_url: cleanWebsiteUrl, maps_url: cleanUrlValue(value(row, idx.maps)),
+      has_website: Boolean(cleanWebsiteUrl),
       send_status: sendStatus, ai_decision: empty(value(row, idx.ai_decision)), ai_reason: empty(value(row, idx.ai_reason)),
       ai_sales_angle: aiSalesAngle, final_subject: empty(value(row, idx.final_subject)), final_email: empty(value(row, idx.final_email)),
       sent_at: optionalTimestamp(value(row, idx.sent_date)), reply_status: replyStatus, source_base: sourceBase,
