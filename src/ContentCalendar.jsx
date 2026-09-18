@@ -1,20 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
- 
+
 const C = { bg:"#060B18",s:"#0A1428",s2:"#0F1D38",b:"#1A2D52",tx:"#F0F0F4",tm:"#8A94A8",td:"#4A5568",acc:"#F8BA10",r:"#FF4D6A",g:"#36DE67",w:"#FFC107",p:"#4A90D9",bl:"#60A5FA" };
 const F = "'Poppins', sans-serif", D = "'Playfair Display', serif";
- 
+
 const PLAT_COLORS = { instagram:"#E1306C", facebook:"#1877F2", tiktok:"#00F2EA", linkedin:"#0A66C2", twitter:"#1DA1F2", youtube:"#FF0000", reels:"#E1306C" };
 const STATUS_COLORS = { pendiente:"#6B7280", "en diseño":"#F59E0B", "en revisión":"#8B5CF6", aprobado:"#36DE67", programado:"#3B82F6", publicado:"#36DE67", pending:"#6B7280", draft:"#F59E0B", "in review":"#8B5CF6", approved:"#36DE67", scheduled:"#3B82F6", published:"#36DE67", posted:"#36DE67", idea:"#6B7280" };
 const TYPE_ICONS = { post:"📷", carrusel:"📱", carousel:"📱", motion:"🎬", reel:"🎥", video:"🎥", story:"📸", imagen:"🖼️", blog:"📝", otro:"📎" };
- 
+
 function extractSheetId(url) { const m = url?.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/); return m ? m[1] : (/^[a-zA-Z0-9_-]{30,}$/.test(url) ? url : null); }
- 
+
 function getPlatColor(plat) {
   const p = (plat || "").toLowerCase();
   for (const [k, v] of Object.entries(PLAT_COLORS)) { if (p.includes(k)) return v; }
   return "#6B7280";
 }
- 
+
 const calCSS = `
 .cal3d-week{margin-bottom:16px}
 .cal3d-week-head{display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px}
@@ -29,7 +29,7 @@ const calCSS = `
 .cal3d-plats{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .cal3d-plat{font-size:10px;padding:2px 8px;border-radius:6px;font-weight:500}
 `;
- 
+
 export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink, readOnly = false }) {
   const [sheetInput, setSheetInput] = useState("");
   const [sheetId, setSheetId] = useState(propSheetId || null);
@@ -38,31 +38,20 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
   const [error, setError] = useState("");
   const [showLink, setShowLink] = useState(!propSheetId);
   const [selPost, setSelPost] = useState(null);
- 
+
   const fetchData = useCallback(async (sid) => {
     if (!sid) return;
     setLoading(true); setError("");
     try {
-      // Prueba varios nombres de pestaña; si ninguno tiene datos, lee la primera hoja
-      const tabs = ["Calendario", "Contenido", "Calendar", "Content Calendar", "Content", "Hoja1", "Sheet1"];
+      // Lee SIEMPRE la primera hoja, sin importar cómo se llame la pestaña (rango sin nombre de pestaña)
       let d = null, lastErr = "";
-      for (const tab of tabs) {
-        try {
-          const r = await fetch(`/api/sheets?sheetId=${sid}&range=${encodeURIComponent(tab)}!A1:Z500`);
-          const j = await r.json();
-          if (j.error) { lastErr = j.error; continue; }
-          if (Array.isArray(j) && j.length > 1) { d = j; break; }
-        } catch (e) { lastErr = e.message; }
-      }
-      if (!d) {
-        try {
-          const r = await fetch(`/api/sheets?sheetId=${sid}&range=A1:Z500`);
-          const j = await r.json();
-          if (Array.isArray(j) && j.length > 1) d = j; else if (j.error) lastErr = j.error;
-        } catch (e) { lastErr = e.message; }
-      }
-      if (!d) { setError(lastErr || "No se pudo leer. Verifica que sea Google Sheet compartido."); setLoading(false); return; }
- 
+      try {
+        const r = await fetch(`/api/sheets?sheetId=${sid}&range=A1:Z500`);
+        const j = await r.json();
+        if (Array.isArray(j) && j.length > 1) d = j; else if (j.error) lastErr = j.error;
+      } catch (e) { lastErr = e.message; }
+      if (!d) { setError(lastErr || "No se pudo leer. Verifica que el Sheet sea nativo y esté compartido como 'Cualquiera con el enlace → Lector'."); setLoading(false); return; }
+
       // Detecta la fila de encabezados (la que tiene más celdas llenas, o la que contiene content/contenido/descripción)
       let headerIdx = d.findIndex(row => row.some(c => c && /content|contenido|descrip|copy|publish|fecha|plataforma|platform/i.test(String(c))));
       if (headerIdx === -1) {
@@ -117,17 +106,17 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
     } catch { setError("Error conectando con Sheets"); }
     setLoading(false);
   }, []);
- 
+
   useEffect(() => { if (propSheetId) { setSheetId(propSheetId); setShowLink(false); } }, [propSheetId]);
   useEffect(() => { if (sheetId) fetchData(sheetId); }, [sheetId, fetchData]);
- 
+
   const handleLink = async () => {
     const id = extractSheetId(sheetInput);
     if (!id) { setError("URL no válida"); return; }
     setSheetId(id); setShowLink(false);
     if (onLink) await onLink(id);
   };
- 
+
   // Link screen
   if (!sheetId || showLink) {
     if (readOnly) return null;
@@ -149,7 +138,7 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
       </div>
     );
   }
- 
+
   // Group by semana
   const weeks = [];
   const weekMap = {};
@@ -158,17 +147,17 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
     if (!weekMap[key]) { weekMap[key] = []; weeks.push(key); }
     weekMap[key].push(p);
   });
- 
+
   // Stats
   const statusCounts = {};
   posts.forEach(p => { statusCounts[p.estado] = (statusCounts[p.estado] || 0) + 1; });
   const typesCounts = {};
   posts.forEach(p => { const t = p.tipo.toLowerCase(); typesCounts[t] = (typesCounts[t] || 0) + 1; });
- 
+
   return (
     <div>
       <style>{calCSS}</style>
- 
+
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -183,10 +172,10 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
           {!readOnly && <button onClick={async () => { setSheetId(null); setPosts([]); setShowLink(true); if (onUnlink) await onUnlink(); }} style={{ background: "none", border: `1px solid ${C.r}30`, borderRadius: 8, padding: "6px 12px", color: C.r, cursor: "pointer", fontSize: 11 }}>✕</button>}
         </div>
       </div>
- 
+
       {loading && <div style={{ textAlign: "center", padding: 24, color: C.acc, fontSize: 13 }}>Cargando calendario...</div>}
       {error && <div style={{ color: C.r, fontSize: 12, marginBottom: 10 }}>{error}</div>}
- 
+
       {!loading && posts.length > 0 && (
         <>
           {/* Stats bar */}
@@ -201,7 +190,7 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
               <span key={t} style={{ fontSize: 10, color: C.tm }}>{TYPE_ICONS[t] || "📎"} {t}: {cnt}</span>
             ))}
           </div>
- 
+
           {/* Weeks */}
           {weeks.map(weekKey => {
             const items = weekMap[weekKey];
@@ -216,7 +205,7 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
                   const stColor = STATUS_COLORS[p.estado] || "#6B7280";
                   const typeIcon = TYPE_ICONS[p.tipo.toLowerCase()] || "📎";
                   const platforms = p.plataforma.split(/[\/,]/).map(s => s.trim()).filter(Boolean);
- 
+
                   return (
                     <div key={p.id} className="cal3d-item" onClick={() => setSelPost(selPost?.id === p.id ? null : p)}>
                       <div className="cal3d-item-icon" style={{ background: platColor + "18", border: `1px solid ${platColor}30` }}>
@@ -240,7 +229,7 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
               </div>
             );
           })}
- 
+
           {/* Post detail */}
           {selPost && (
             <div className="cal3d-detail">
@@ -287,7 +276,7 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
           )}
         </>
       )}
- 
+
       {!loading && posts.length === 0 && !error && (
         <div style={{ textAlign: "center", padding: 32, color: C.td, fontSize: 12 }}>
           Sin datos. Revisa que el Sheet tenga una fila de encabezados (Content/Contenido, Platform, Status...) y esté compartido como "Cualquiera con el enlace → Lector".
@@ -296,4 +285,3 @@ export default function ContentCalendar({ sheetId: propSheetId, onLink, onUnlink
     </div>
   );
 }
- 
